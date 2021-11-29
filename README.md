@@ -1,4 +1,4 @@
-# hololights
+# hololight
 
 ## Setup
 
@@ -13,5 +13,5 @@ $ source env/bin/activate
 
 ## Run
 ```
-(env) $ python -m hololights.bci
+(env) $ python -m hololight.bci
 ```
