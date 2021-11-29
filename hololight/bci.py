@@ -1,7 +1,10 @@
+from pathlib import Path
+
 import ezmsg as ez
 
 from ezbci.openbci.openbci import OpenBCISourceSettings
 
+from .shallowfbcspdecoder import ShallowFBCSPDecoderSettings
 from .hololightsystem import HololightSystem, HololightSystemSettings
 
 if __name__ == "__main__":
@@ -32,6 +35,20 @@ if __name__ == "__main__":
         default = 0.0
     )
 
+    parser.add_argument(
+        '--classes',
+        type = int,
+        help = 'Number of classes in decoder.  Ignored if --model specified',
+        default = 2
+    )
+
+    parser.add_argument(
+        '--model',
+        type = lambda x: Path( x ).absolute(),
+        help = 'Path to pre-trained model file',
+        default = None
+    )
+
     args = parser.parse_args()
 
     openbcisource_settings = OpenBCISourceSettings(
@@ -40,8 +57,14 @@ if __name__ == "__main__":
         poll_rate = None if args.poll <= 0 else args.poll
     )
 
+    decoder_settings = ShallowFBCSPDecoderSettings(
+        n_classes = args.classes,
+        model_file = args.model
+    )
+
     settings = HololightSystemSettings(
-        openbcisource_settings = openbcisource_settings
+        openbcisource_settings = openbcisource_settings,
+        decoder_settings = decoder_settings
     )
 
     system = HololightSystem( settings )
