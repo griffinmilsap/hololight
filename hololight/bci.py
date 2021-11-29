@@ -22,7 +22,7 @@ if __name__ == "__main__":
         '--blocksize',
         type = int,
         help = 'Sample block size @ 500 Hz',
-        default = 50
+        default = 100
     )
 
     parser.add_argument(
