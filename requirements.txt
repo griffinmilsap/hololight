@@ -1,0 +1,12 @@
+ezmsg
+ezbci
+matplotlib==3.4.1
+numba==0.53.1
+numbagg==0.2.1
+numpy==1.19.5
+pandas==1.2.4
+scipy==1.6.3
+xarray==0.17.0
+pyzmq==22.2.1
+websockets==8.1
+torch
