@@ -11,6 +11,10 @@ from ezbci.openbci.openbci import (
     OpenBCIChannelConfigSettings,
     OpenBCIChannelSetting,
 )
+from ezmsg.builtins.websocket import WebsocketSettings
+
+from hololight.go_task import GoTaskSettings
+from hololight.modeltraining import ModelTrainingLogicSettings, ModelTrainingSettings
 
 from .messagelogger import MessageLoggerSettings
 from .shallowfbcspdecoder import ShallowFBCSPDecoderSettings
@@ -60,7 +64,7 @@ if __name__ == "__main__":
         '--powerdown',
         type = str,
         help = 'Channels to disconnect/powerdown',
-        default = '00000000'
+        default = '00011111'
     )
 
     parser.add_argument(
@@ -117,27 +121,28 @@ if __name__ == "__main__":
         )
     )
 
-    openbcisource_settings = OpenBCISourceSettings(
-        device = args.device,
-        blocksize = args.blocksize,
-        impedance = args.impedance,
-        ch_config = OpenBCIChannelConfigSettings(
-            ch_setting = tuple( [ 
-                ch_setting( i ) for i in range( 8 ) 
-            ] )
-        )
-    )
-
-    cur_time = time.strftime( '%Y%m%dT%H%M%S' )
-    out_f: Path = args.output / f'{cur_time}.txt'
-
     settings = HololightSystemSettings(
-        openbcisource_settings = openbcisource_settings,
+        openbcisource_settings = OpenBCISourceSettings(
+            device = args.device,
+            blocksize = args.blocksize,
+            impedance = args.impedance,
+            ch_config = OpenBCIChannelConfigSettings(
+                ch_setting = tuple( [ 
+                    ch_setting( i ) for i in range( 8 ) 
+                ] )
+            )
+        ),
         decoder_settings = ShallowFBCSPDecoderSettings(
             model_file = args.model
         ),
-        logger_settings = MessageLoggerSettings(
-            output = out_f
+        modeltraining_settings = ModelTrainingSettings(
+            settings = ModelTrainingLogicSettings(
+                recording_dir = args.output 
+            ),
+            websocket_settings = WebsocketSettings(
+                host = "0.0.0.0",
+                port = 8082
+            )
         )
     )
 
