@@ -1,11 +1,24 @@
+import time
 from pathlib import Path
 
 import ezmsg as ez
 
-from ezbci.openbci.openbci import OpenBCISourceSettings
+from ezbci.openbci.openbci import (
+    OpenBCISourceSettings, 
+    GainState,
+    PowerStatus,
+    BiasSetting,
+    OpenBCIChannelConfigSettings,
+    OpenBCIChannelSetting,
+)
 
+from .messagelogger import MessageLoggerSettings
 from .shallowfbcspdecoder import ShallowFBCSPDecoderSettings
 from .hololightsystem import HololightSystem, HololightSystemSettings
+
+from typing import (
+    Dict,
+)
 
 if __name__ == "__main__":
     import argparse
@@ -14,6 +27,7 @@ if __name__ == "__main__":
         description = 'Hololight ARBCI Lightbulb Demonstration'
     )
 
+    ## OpenBCI Arguments
     parser.add_argument(
         '--device',
         type = str,
@@ -29,12 +43,34 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        '--poll',
-        type = float,
-        help = 'Poll Rate (Hz). 0 for auto-config',
-        default = 0.0
+        '--gain',
+        type = int,
+        help = 'Gain setting for all channels.  Valid settings {1, 2, 4, 6, 8, 12, 24}',
+        default = 24
     )
 
+    parser.add_argument(
+        '--bias',
+        type = str,
+        help = 'Include channels in bias calculation',
+        default = '11111111'
+    )
+
+    parser.add_argument(
+        '--powerdown',
+        type = str,
+        help = 'Channels to disconnect/powerdown',
+        default = '00000000'
+    )
+
+    parser.add_argument(
+        '--impedance',
+        action = 'store_true',
+        help = "Enable continuous impedance monitoring",
+        default = False
+    )
+
+    ## Decoder Arguments
     parser.add_argument(
         '--classes',
         type = int,
@@ -49,22 +85,60 @@ if __name__ == "__main__":
         default = None
     )
 
+    parser.add_argument(
+        '--output',
+        type = lambda x: Path( x ).absolute(),
+        help = 'Directory to save output files',
+        default = Path( '.' ) / "recordings"
+    )
+
     args = parser.parse_args()
+
+    gain_map: Dict[ int, GainState ] = {
+        1:  GainState.GAIN_1,
+        2:  GainState.GAIN_2,
+        4:  GainState.GAIN_4,
+        6:  GainState.GAIN_6,
+        8:  GainState.GAIN_8,
+        12: GainState.GAIN_12,
+        24: GainState.GAIN_24
+    }
+
+    ch_setting = lambda ch_idx: ( 
+        OpenBCIChannelSetting(
+            gain = gain_map[ args.gain ], 
+            power = ( PowerStatus.POWER_OFF 
+                if args.powerdown[ch_idx] == '1' 
+                else PowerStatus.POWER_ON ),
+            bias = ( BiasSetting.INCLUDE   
+                if args.bias[ch_idx] == '1'
+                else BiasSetting.REMOVE 
+            )
+        )
+    )
 
     openbcisource_settings = OpenBCISourceSettings(
         device = args.device,
         blocksize = args.blocksize,
-        poll_rate = None if args.poll <= 0 else args.poll
+        impedance = args.impedance,
+        ch_config = OpenBCIChannelConfigSettings(
+            ch_setting = tuple( [ 
+                ch_setting( i ) for i in range( 8 ) 
+            ] )
+        )
     )
 
-    decoder_settings = ShallowFBCSPDecoderSettings(
-        n_classes = args.classes,
-        model_file = args.model
-    )
+    cur_time = time.strftime( '%Y%m%dT%H%M%S' )
+    out_f: Path = args.output / f'{cur_time}.txt'
 
     settings = HololightSystemSettings(
         openbcisource_settings = openbcisource_settings,
-        decoder_settings = decoder_settings
+        decoder_settings = ShallowFBCSPDecoderSettings(
+            model_file = args.model
+        ),
+        logger_settings = MessageLoggerSettings(
+            output = out_f
+        )
     )
 
     system = HololightSystem( settings )
