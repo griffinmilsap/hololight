@@ -44,12 +44,7 @@ class ShallowFBSCPDecoder( ez.Unit ):
 
     def load_model( self, model_file: Path ) -> None:
         self.STATE.checkpoint = torch.load( model_file, map_location = 'cpu' )
-        self.STATE.model = ShallowFBCSPNet(
-            self.STATE.checkpoint[ 'num_channels' ], 
-            self.STATE.checkpoint[ 'num_classes' ],
-            input_time_length = self.STATE.checkpoint[ 'num_time' ],
-            final_conv_length = 'auto'
-        ).construct()
+        self.STATE.model = self.STATE.checkpoint[ 'model_definition' ].construct()
         self.STATE.model.load_state_dict( self.STATE.checkpoint[ 'model_state_dict' ] )
 
     # We support dynamic model reload

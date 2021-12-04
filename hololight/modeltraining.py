@@ -1,3 +1,5 @@
+import asyncio
+
 from dataclasses import field, replace
 from pathlib import Path
 import time
@@ -70,20 +72,31 @@ class ModelTrainingLogic( ez.Unit ):
             
 
     @ez.subscriber( INPUT_LOG )
-    # @ez.publisher( OUTPUT_MODEL )
+    @ez.publisher( OUTPUT_MODEL )
     async def train_model( self, message: Path ) -> AsyncGenerator:
         # Message is a path to a closed and complete training session recording
-        model_out = self.SETTINGS.recording_dir / \
-            self.STATE.training_session.session / \
-            f'{self.STATE.time_str}.checkpoint'
-
+        train_dir = self.SETTINGS.recording_dir / \
+            self.STATE.training_session.session
+        tag = f'{self.STATE.time_str}'
+        
         print( 'Kicking off Train script...' )
-        print( f'Outputting to {model_out}' )
 
-        # TODO: Kickoff training script to crunch on all recordings in the session folder
-        # TODO: Wait for training script to complete and write the checkpoint file
+        proc = await asyncio.create_subprocess_shell(
+            f'python -m hololight.train --dir={str(train_dir)} --tag={tag}',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
 
-        # yield ( self.OUTPUT_MODEL, model_out )
+        stdout, stderr = await proc.communicate()
+
+        print(f'[Train script exited with {proc.returncode}]')
+
+        if stdout:
+            print(f'[stdout]\n{stdout.decode()}')
+        if stderr:
+            print(f'[stderr]\n{stderr.decode()}')
+
+        yield ( self.OUTPUT_MODEL, train_dir / f'{tag}.checkpoint' )
 
         self.STATE.training_session = None
 

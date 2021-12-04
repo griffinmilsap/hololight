@@ -46,6 +46,7 @@ class HololightSystem( ez.System ):
         return ( 
             ( self.SOURCE.OUTPUT_SIGNAL, self.PREPROC.INPUT_SIGNAL ),
             ( self.PREPROC.OUTPUT_SIGNAL, self.DECODER.INPUT_SIGNAL ),
+            ( self.TRAINING.OUTPUT_MODEL, self.DECODER.INPUT_MODEL ),
             ( self.DECODER.OUTPUT_DECODE, self.DEBUG.INPUT ),
             ( self.PREPROC.OUTPUT_SIGNAL, self.TRAINING.INPUT_SIGNAL ),
         )
