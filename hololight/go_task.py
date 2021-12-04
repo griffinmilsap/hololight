@@ -55,9 +55,7 @@ class GoTask( ez.Unit ):
             """ If we're already running, we just poop out here """
             return
 
-        # Design Task - classes are 1-indexed with non-activity periods
-        # corresponding to class label 0
-        trials: List[ int ] = list( range( 1, n_classes + 1 ) )
+        trials: List[ int ] = list( range( n_classes ) )
         trials *= self.SETTINGS.n_trials_per_class
         random.shuffle( trials )
 

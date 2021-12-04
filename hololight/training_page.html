@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <script type = "text/javascript">
+            function WebSocketTest() {
+                if ( "WebSocket" in window ) {
+                    var ws = new WebSocket( "ws://localhost:8082" );
+
+                    ws.onopen = function() {
+                        ws.send( "HELLO" );
+                    }
+
+                    ws.onmessage = function (evt) {
+                        console.log( `Received ${evt.data} from server` );
+                    }
+
+                    ws.onclose = function() {
+                        console.log( 'Closed Connection to server' );
+                    }
+                }
+            }
+        </script>
+    </head>
+
+    <body>
+        <div id = "sse">
+            <a href = "javascript:WebSocketTest()">Run WebSocket</a>
+        </div>
+    </body>
+
+</html>

@@ -1,328 +1,340 @@
 import json
 import time
 import base64
-
+import warnings
 from pathlib import Path
 
-import xarray as xr
 import numpy as np
+import matplotlib.pyplot as plt
 
 import torch
+from torch.utils.data import (
+    Dataset,
+    DataLoader, 
+    random_split, 
+    RandomSampler
+)
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from shallowfbcspnet import ShallowFBCSPNet
+from .shallowfbcspnet import ShallowFBCSPNet
 
-def load_file( data_file: Path ) -> xr.Dataset:
+from typing import (
+    Optional,
+    List,
+    Tuple
+)
 
-    fs = None
-    ch_names = None
-
-    eeg_blocks = []
-    eeg_timestamps = []
-
-    events = []
-    event_timestamps = []
+class HoloLightDataset( Dataset ):
     
-    with open( data_file, 'r' ) as data_f:
-        for line in data_f:
-            msg = json.loads( line )
-            if msg[ '_type' ] == 'EEGInfoMessage':
-                fs = msg[ 'fs' ]
-                ch_names = msg[ 'ch_names' ]
+    fs: int
+    ch_names: List[ str ]
+    shape: Tuple[ int, ... ]
+    trials: torch.tensor
+    labels: torch.tensor
 
-            elif msg[ '_type' ] == 'EEGDataMessage':
-                dtype, data, shape = tuple( msg[ 'data' ] )
-                b64_data = base64.b64decode( data.encode( 'ascii' ) )
-                block = np.frombuffer( b64_data, dtype = dtype ).reshape( shape )
-                eeg_blocks.append( block )
-                eeg_timestamps.append( msg[ '_timestamp' ] )
-
-            elif msg[ '_type' ] == 'GoTaskMessage':
-                events.append( dict(
-                    stage = msg[ 'stage' ],
-                    trial_class = msg[ 'trial_class' ],
-                ) )
-                event_timestamps.append( msg[ '_timestamp' ] )
-
-    blocks = xr.DataArray( 
-        np.array( eeg_blocks ), 
-        name = "eeg",
-        dims = [ 'block', 'element', 'channel' ], 
-        coords = dict(
-            _timestamp = ( 'block', eeg_timestamps ),
-            ch_name = ( 'channel', ch_names )
-        ),
-        attrs = dict( fs = fs )
-    )
-
-    events = xr.DataArray( 
-        events, 
-        name = 'events', 
-        dims = [ 'time' ], 
-        coords = dict( 
-            time = ( 'time', np.array( event_timestamps ) ) 
-        ) 
-    )
-
-    eeg = blocks.stack( time = [ 'block', 'element' ] )
-    eeg = eeg.reset_index( 'time' )
-
-    eeg._timestamp.loc[ dict( 
-        time = eeg.element != len( blocks.element ) - 1 
-    ) ] = np.nan
-    time_coords = eeg._timestamp.interpolate_na( 
-        dim = 'time', 
-        fill_value = 'extrapolate' 
-    )
-    eeg = eeg \
-        .assign_coords( 
-            time = time_coords,
-            sample = ( 'time', np.arange( len( eeg.time ) ).astype( np.int64 ) )
-        ) \
-        .drop( '_timestamp' ) \
-        .assign_attrs( fs = fs )
-    
-    ds = xr.Dataset( dict( 
-            eeg = eeg, 
-            events = events 
-        ),
-        attrs = dict(
-            filename = data_file.stem,
-        )
-    )
-
-    return ds
-
-def split( ds, ratio, shuffle = True ):
-    
-    trials = ds.trials
-    labels = ds.labels
-    
-    trial_dim = labels.dims[0]
-
-    classes, counts = np.unique( labels, return_counts = True )
-    trials_per_class = np.min( counts )
-    split_stop = int( trials_per_class * ratio )
-    indices = [ labels.trial.where( labels == c ).dropna( 'trial' ).copy().values.astype( np.int64 ) for c in classes ]
-
-    a, b = [], []
-    for i, c in zip( indices, classes ):
-        if shuffle: np.random.shuffle( i )
-        a.append( i[ : split_stop ] )
-        b.append( i[ split_stop : trials_per_class ] )
+    def __init__( self, input_dir: Path ):
         
-    a = np.array( a ).flatten()
-    b = np.array( b ).flatten()
-        
-    if shuffle: 
-        np.random.shuffle( a )
-        np.random.shuffle( b )
-        
-    return ( 
-        ds.isel( { trial_dim: np.array( a ).flatten() } ), 
-        ds.isel( { trial_dim: np.array( b ).flatten() } )
-    )
+        cur_class: Optional[ int ] = None
+
+        self.trials = []
+        self.labels = []
+
+        for data_file in input_dir.glob( '*.txt' ):
+            with open( data_file, 'r' ) as data_f:
+                for line in data_f:
+                    msg = json.loads( line )
+
+                    if msg[ '_type' ] == 'EEGInfoMessage':
+                        # Assumes all files have same fs, ch_names and shape
+                        self.fs = msg[ 'fs' ]
+                        self.ch_names = msg[ 'ch_names' ]
+                        self.shape = msg[ 'shape' ]
+
+                    elif msg[ '_type' ] == 'EEGDataMessage':
+                        if cur_class is not None:
+                            dtype, data, shape = tuple( msg[ 'data' ] )
+                            b64_data = base64.b64decode( data.encode( 'ascii' ) )
+                            block = np.frombuffer( b64_data, dtype = dtype ).reshape( shape )
+                            self.trials.append( torch.tensor( block.T, dtype = torch.float32 ) )
+                            self.labels.append( cur_class )
+
+                    elif msg[ '_type' ] == 'GoTaskMessage':
+                        cur_class = msg[ 'trial_class' ] if msg[ 'stage' ] == 'ACTIVITY' else None
+                        
+        self.trials = torch.stack( self.trials )
+        self.labels = torch.tensor( self.labels )
+                        
+    def __len__( self ) -> int:
+        return len( self.labels )
+
+    def __getitem__( self, idx ) -> Tuple[ torch.tensor, int ]:
+        return self.trials[ idx, ... ], self.labels[ idx, ... ]
+            
 
 if __name__ == '__main__':
 
     import argparse
 
-    try:
-        import matplotlib.pyplot as plt
-        plot = True
-    except ImportError:
-        plot = False
-
-
-    # TODO: Argparse
-    rec_path = Path( 'gm_motor_both_hands' )
-    batch_size = 4
-    max_epochs = 5000
-    no_improvement_epochs = 100
-    learning_rate = 0.000625
-    save_output = True
-
-    training_timestamp = time.strftime( '%Y%m%dT%H%M%S' )
-
-    dataset = []
-    for data_file in rec_path.glob( '*.txt' ):
-
-        rec = load_file( data_file )
-        eeg = rec.eeg.dropna( 'time' )
-        events = rec.events.dropna( 'time' )
-
-        trials, labels = [], []
-        for t, event_da in events.groupby( 'time' ):
-            event = event_da.item()
-            if event[ 'stage' ] != 'ACTIVITY': continue
-            t_idx = eeg.indexes[ 'time' ].get_loc( t + 0.5, method = 'nearest' )
-            trials.append( eeg.isel( time = slice( t_idx, t_idx + int( eeg.fs ) ) ).drop( 'time') )
-            labels.append( event[ 'trial_class' ] )
-            
-        dataset.append( 
-            xr.Dataset( dict( 
-                trials = xr.concat( trials, dim = 'trial' ), 
-                labels = xr.DataArray( labels, dims = [ 'trial' ] ) 
-        ) ) )
-
-    dataset = xr.concat( dataset, dim = 'trial' )   
-
-    train_dset, test = split( dataset, 0.8 )
-    train, valid = split( train_dset, 0.75 )
-
-    classes = np.unique( dataset.labels )
-    num_classes = len( classes ) 
-
-    model = ShallowFBCSPNet( 
-        len( dataset.channel ), num_classes, 
-        input_time_length = len( dataset.time ), 
-        final_conv_length = 'auto' 
-    ).construct()
-
-    dim_order = [ 'trial', 'channel', 'time' ]
-    X_tensor = lambda da: torch.tensor( 
-        da.transpose( 
-            *[ d for d in dim_order if d in da.dims ], 
-            transpose_coords = False 
-        ).values.astype( np.float32 )[ ..., np.newaxis ] 
+    parser = argparse.ArgumentParser( 
+        description = 'ShallowFBCSP Training Script'
     )
 
-    y_tensor = lambda da: torch.tensor( da.values.astype( np.int64 ) )
+    parser.add_argument(
+        '--dir',
+        type = lambda s: Path( s ).absolute(),
+        help = 'Directory of input files for training'
+    )
+
+    parser.add_argument(
+        '--tag',
+        type = str,
+        help = 'Output training tag',
+        default = None
+    )
+
+    parser.add_argument( 
+        '--progress',
+        action = 'store_true',
+        help = 'Output a progress bar with tqdm',
+        default = False
+    )
+
+    training_group = parser.add_argument_group( 'training' )
+
+    training_group.add_argument(
+        '--batchsize',
+        type = int,
+        help = "Batch size for training",
+        default = 64
+    )
+
+    training_group.add_argument(
+        '--epochs',
+        type = int,
+        help = 'Number of training epochs',
+        default = 100
+    )
+
+    training_group.add_argument( 
+        '--lr',
+        type = float,
+        help = 'Learning rate for training (AdamW)',
+        default = 0.00625
+    )
+
+    training_group.add_argument(
+        '--ratio',
+        type = float,
+        help = "Percentage of trials to use for train split",
+        default = 0.9
+    )
+
+    model_group = parser.add_argument_group( 'model' )
+
+    model_group.add_argument(
+        '--timefilters',
+        type = int,
+        help = "Number of time kernels (FIR Filters) to fit",
+        default = 40
+    )
+
+    model_group.add_argument(
+        '--timefilterlength',
+        type = int,
+        help = "Size of time kernels in samples -- akin to FIR filter order",
+        default = 25
+    )
+
+    model_group.add_argument(
+        '--spatfilters',
+        type = int,
+        help = "Number of spatial kernels (Spatial filters) to fit",
+        default = 40
+    )
+
+    model_group.add_argument(
+        '--pooltimelength',
+        type = int,
+        help = "Mean pooling for time dimension in samples",
+        default = 75
+    )
+
+    model_group.add_argument(
+        '--pooltimestride',
+        type = int,
+        help = "Mean pooling stride for time dimension (internal downsampling)",
+        default = 15
+    )
+
+    args = parser.parse_args()
+
+    input_dir = args.dir
+    tag = time.strftime( '%Y%m%dT%H%M%S' ) if args.tag is None else args.tag
+
+    progress = args.progress # True
+
+    train_ratio = args.ratio # 0.9
+    learning_rate = args.lr # 0.00625
+    max_epochs = args.epochs # 100
+    batch_size = args.batchsize # 64
+
+    n_filters_time = args.timefilters # 5
+    n_filters_spat = args.spatfilters # 5
+    pool_time_length = args.pooltimelength # 25
+    pool_time_stride = args.pooltimestride # 5
+    filter_time_length = args.timefilterlength # 10
+
+    ## Build model
+    dset = HoloLightDataset( input_dir )
+    train_dset_size = int( len( dset ) * train_ratio )
+    train_dset, test_dset = random_split( dset, [ train_dset_size, len( dset ) - train_dset_size ] )
+
+    model_definition = ShallowFBCSPNet( 
+        dset.shape[1], len( np.unique( dset.labels ) ), 
+        input_time_length = dset.shape[0], 
+        final_conv_length = 'auto',
+        split_first_layer = False,
+        filter_time_length = filter_time_length,
+        n_filters_time = n_filters_time,
+        n_filters_spat = n_filters_spat,
+        pool_time_length = pool_time_length,
+        pool_time_stride = pool_time_stride
+    )
+
+    model = model_definition.construct()
+
+    model_parameters = filter( lambda p: p.requires_grad, model.parameters() )
+    params = sum( [ np.prod( p.size() ) for p in model_parameters ] )
+    # print( f'Model has {params} trainable parameters' )
 
     loss_fn = torch.nn.NLLLoss()
     optimizer = torch.optim.AdamW( 
         model.parameters(), 
         lr = learning_rate, 
-        weight_decay = 0 
+        weight_decay = 0.1 
     )
 
-    valid_X, test_X = tuple( [ X_tensor( da ) for da in [ valid.trials, test.trials ] ] )
-    valid_y, test_y = tuple( [ y_tensor( da ) for da in [ valid.labels, test.labels ] ] )
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR( optimizer, T_max = max_epochs / 4 )
 
     best_loss = None
     best_loss_epoch = None
 
-    cur_train_data = train
-    train_loss, valid_loss, test_loss = [], [], []
+    train_loss, test_loss, test_accuracy = [], [], []
+    lr = []
 
-    for epoch in range( max_epochs ):
+    epoch_itr = range( max_epochs )
+
+    if progress:
+        try: 
+            from tqdm.autonotebook import tqdm
+            epoch_itr = tqdm( epoch_itr )
+        except:
+            warnings.warn( 'tqdm not installed, no progressbar will show.' )
+            progress = False
+        
+    for epoch in epoch_itr:
 
         model.train()
-        for bounds, batch_ds in cur_train_data.groupby_bins( 
-            'trial', bins = len( train.trial ) // batch_size 
+        train_loss_batches = []
+        for train_feats, train_labels in DataLoader(
+            train_dset, batch_size = batch_size, 
+            sampler = RandomSampler( train_dset )
         ):
-            train_X = X_tensor( batch_ds.trials )
-            train_y = y_tensor( batch_ds.labels )
-
-            pred = model( train_X )
-            loss = loss_fn( pred, train_y )
+            pred = model( train_feats )
+            loss = loss_fn( pred, train_labels )
+            train_loss_batches.append( loss.item() )
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
-        train_loss.append( loss.item() )
+            
+        scheduler.step()
+            
+        lr.append( scheduler.get_last_lr()[0] )
+        train_loss.append( np.mean( train_loss_batches ) )
 
         model.eval()
         with torch.no_grad():
-            valid_loss.append( loss_fn( model( valid_X ), valid_y ).item() )
-            test_loss.append( loss_fn( model( test_X ), test_y ).item() )
+            accuracy = 0
+            test_loss_batches = []
+            for test_feats, test_labels in DataLoader(
+                test_dset, batch_size = batch_size, 
+                sampler = RandomSampler( test_dset )
+            ):
+                output = model( test_feats )
+                test_loss_batches.append( loss_fn( output, test_labels ).item() )
+                accuracy += ( output.argmax( axis = 1 ) == test_labels ).sum().item()
 
-            loss = valid_loss[-1] if cur_train_data is train else test_loss[-1]
+            test_loss.append( np.mean( test_loss_batches ) )
+            test_accuracy.append( accuracy / len( test_dset ) )
+            
+    acc_str = f'Accuracy: {test_accuracy[-1] * 100.0:0.2f}%'
 
-            best_loss = loss if best_loss is None else ( 
-                loss if loss < best_loss else best_loss 
-            )
+    fig, ax = plt.subplots( dpi = 100, figsize = ( 6.0, 4.0 ) )
+    ax.plot( train_loss, label = 'Train' )
+    ax.plot( test_loss, label = 'Test' )
+    ax.plot( test_accuracy, label = 'Test Accuracy' )
+    ax.plot( lr, label = 'Learning Rate' )
+    ax.legend()
+    ax.set_yscale( 'log' )
+    ax.set_xlabel( 'Epoch' )
 
-            if best_loss is loss:
-                best_loss_epoch = epoch
-                checkpoint = {
-                    'epoch': epoch,
-                    'num_classes': num_classes,
-                    'num_channels': len( dataset.channel ),
-                    'num_time': len( dataset.time ),
-                    'fs': eeg.fs, 
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'train_loss': train_loss[-1],
-                    'valid_loss': valid_loss[-1],
-                    'test_loss': test_loss[-1]
-                }
-
-            elif epoch > ( best_loss_epoch + no_improvement_epochs ):
-                print( 'Completed Training Pass' )
-
-                # Load best checkpoint
-                model.load_state_dict( checkpoint[ 'model_state_dict' ] )
-                optimizer.load_state_dict( checkpoint[ 'optimizer_state_dict' ] )
-
-                # Add validation data and train
-                if cur_train_data is train:
-                    cur_train_data = train_dset
-                    best_loss = None
-                    best_loss_epoch = None
-                else:
-                    print( 'Done Training' )
-                    break
-
-    out_checkpoint = rec_path / f'{training_timestamp}.checkpoint'
-    if save_output: 
-        torch.save( checkpoint, out_checkpoint )
+    out_train = input_dir / f'{tag}_train.png'
+    fig.savefig( out_train )
 
     model.eval()
-    decode = model( test_X ).argmax( axis = 1 )
 
-    ## Present some training information/accuracy
-    accuracy = ( decode == test_y ).sum().item() / len( test_y )
-    acc_str = f'Accuracy: {accuracy * 100.0:0.2f}%'
+    output = [ 
+        ( model( test_feats ).argmax( axis = 1 ), test_labels )
+        for test_feats, test_labels 
+        in DataLoader( test_dset, batch_size = batch_size ) 
+    ]
 
-    print( acc_str )
+    decode, test_y = zip( *output )
+    test_y = torch.cat( test_y, axis = 0 )
+    decode = torch.cat( decode, axis = 0 )
 
-    confusion = np.zeros( ( num_classes, num_classes ) )
+    classes = np.unique( dset.labels )
+    confusion = np.zeros( ( len( classes ), len( classes ) ) )
     for true_idx, true_class in enumerate( classes ):
         class_trials = np.where( test_y == true_class )[0]
         for pred_idx, pred_class in enumerate( classes ):
             num_preds = ( decode[ class_trials ] == pred_class ).sum().item()
             confusion[ true_idx, pred_idx ] = num_preds / len( class_trials )
-            
-    print( confusion )
+    
 
-    if plot:
+    fig, ax = plt.subplots( dpi = 100 )
+    corners = np.arange( len( classes ) + 1 ) - 0.5
+    im = ax.pcolormesh( 
+        corners, corners, confusion, alpha = 0.5,
+        cmap = plt.cm.Blues, vmin = 0.0, vmax = 1.0
+    )
 
-        fig, ax = plt.subplots( dpi = 100 )
-        ax.plot( np.array( train_loss ), label = 'train' )
-        ax.plot( np.array( valid_loss ), label = 'valid' )
-        ax.plot( np.array( test_loss ), label = 'test' )
+    for row_idx, row in enumerate( confusion ):
+        for col_idx, freq in enumerate( row ):
+            ax.annotate( 
+                str( freq ), ( col_idx, row_idx ), 
+                ha = 'center', va = 'center' 
+            )
 
-        ax.set_ylabel( 'loss' )
-        ax.set_xlabel( 'iteration' )
-        ax.legend()
-        ax.set_yscale( 'log' )
+    ax.set_aspect( 'equal' )
+    ax.set_xticks( classes )
+    ax.set_yticks( classes )
+    ax.set_ylabel( 'True Class' )
+    ax.set_xlabel( 'Predicted Class' )
+    ax.invert_yaxis( )
+    fig.colorbar( im )
+    ax.set_title( acc_str )
 
-        if save_output: 
-            fig.savefig( rec_path / f'{training_timestamp}_training.png' )
+    out_accuracy = input_dir / f'{tag}_acc.png'
+    fig.savefig( out_accuracy )
 
-    if plot:
-        fig, ax = plt.subplots( dpi = 100 )
-        corners = np.arange( num_classes + 1 ) - 0.5
-        im = ax.pcolormesh( 
-            corners, corners, confusion, alpha = 0.5,
-            cmap = plt.cm.Blues, vmin = 0.0, vmax = 1.0
-        )
+    checkpoint = {
+        'model_definition': model_definition,
+        'fs': dset.fs, 
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+    }
 
-        for row_idx, row in enumerate( confusion ):
-            for col_idx, freq in enumerate( row ):
-                ax.annotate( 
-                    str( freq ), ( col_idx, row_idx ), 
-                    ha = 'center', va = 'center' 
-                )
-
-        ax.set_aspect( 'equal' )
-        ax.set_xticks( classes )
-        ax.set_yticks( classes )
-        ax.set_ylabel( 'True Class' )
-        ax.set_xlabel( 'Predicted Class' )
-        fig.colorbar( im )
-        ax.set_title( acc_str )
-
-        if save_output: 
-            fig.savefig( rec_path / f'{training_timestamp}_confusion.png' )
+    out_checkpoint = input_dir / f'{tag}.checkpoint'
+    torch.save( checkpoint, out_checkpoint )

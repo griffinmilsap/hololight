@@ -10,6 +10,8 @@ from pathlib import Path
 import ezmsg as ez
 import numpy as np
 
+from ezbci.timeseriesmessage import TimeSeriesMessage, TimeSeriesInfoMessage
+
 from typing import (
     Optional,
     Dict,
@@ -28,15 +30,26 @@ class MessageLoggerSettings( ez.Settings ):
     output: Optional[ Path ] = None
 
 class MessageLoggerState( ez.State ):
+    signal_info: Optional[ TimeSeriesInfoMessage ] = None
     output_files: Dict[ Path, TextIOWrapper ] = field( default_factory = dict )
 
 class MessageLogger( ez.Unit ):
+    # FIXME: This logger became coupled to timeseriesmessage the moment 
+    # I converted it to dynamically log to files.
+    # Timeseries messages have metainformation that is only sent once at the
+    # beginning of the stream.  This information is required for interpretation
+    # of subsequent TimeSeriesDataMessages...  As such, we need to cache the
+    # info messages here and write them to files as we dynamically open them.
+    # This is terrible for a variety of reasons.
+    # Additionally, if we try to write several Timeseries messages to the same file,
+    # we don't have any way to distinguish the signals, let alone write both info messages..
 
     SETTINGS: MessageLoggerSettings
     STATE: MessageLoggerState
 
     INPUT_START = ez.InputStream( Path )
     INPUT_STOP = ez.InputStream( Path )
+    INPUT_SIGNAL = ez.InputStream( TimeSeriesMessage ) # supports logging ONE stream
     INPUT_MESSAGE = ez.InputStream( Any )
     OUTPUT_START = ez.OutputStream( Path )
     OUTPUT_STOP = ez.OutputStream( Path )
@@ -50,6 +63,10 @@ class MessageLogger( ez.Unit ):
         if not filepath.parent.exists():
             filepath.parent.mkdir( parents = True )
         self.STATE.output_files[ filepath ] = open( filepath, mode = 'w' )
+
+        # We need to write cacheed signal info if we have it.. ugh this sucks
+        if self.STATE.signal_info is not None:
+            self.write_message( self.STATE.signal_info )
 
         return filepath
 
@@ -85,10 +102,21 @@ class MessageLogger( ez.Unit ):
 
     @ez.subscriber( INPUT_MESSAGE )
     async def on_message( self, message: Any ) -> None:
+        self.write_message( message )
+
+    @ez.subscriber( INPUT_SIGNAL )
+    async def on_signal( self, message: TimeSeriesMessage ) -> None:
+        # We need to write cache signal info.. ugh this sucks
+        if isinstance( message, TimeSeriesInfoMessage ):
+            self.STATE.signal_info = message
+        self.write_message( message )
+
+    def write_message( self, message: Any ) -> None:
         message: str = json.dumps( message, cls = MessageEncoder )
         for output_f in self.STATE.output_files.values():
             output_f.write( f'{message}\n' )
             output_f.flush()
+
 
     def shutdown( self ) -> None:
         """ Note that files that are closed at shutdown don't publish messages """

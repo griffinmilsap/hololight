@@ -18,12 +18,9 @@ $ source env/bin/activate
 
 ## TODO
 Hardware
-1. Make 4x electrode connectors
 1. Assemble final hardware w/ head strap
 
-Software
-1. Triggerable Go task w/ dynamic recording
-1. Modify Shallow FPCSP to dynamically load in new models
+Software  
 1. Subprocess Train.py
 1. philips hue unit for single light control
 1. deploy to Pizero2

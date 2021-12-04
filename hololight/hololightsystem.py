@@ -47,10 +47,7 @@ class HololightSystem( ez.System ):
             ( self.SOURCE.OUTPUT_SIGNAL, self.PREPROC.INPUT_SIGNAL ),
             ( self.PREPROC.OUTPUT_SIGNAL, self.DECODER.INPUT_SIGNAL ),
             ( self.DECODER.OUTPUT_DECODE, self.DEBUG.INPUT ),
-
-            # Inputs to data logger
-            ( self.PREPROC.OUTPUT_SIGNAL, self.TRAINING.INPUT_LOGGER )
-
+            ( self.PREPROC.OUTPUT_SIGNAL, self.TRAINING.INPUT_SIGNAL ),
         )
 
 

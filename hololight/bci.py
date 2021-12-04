@@ -14,7 +14,7 @@ from ezbci.openbci.openbci import (
 from ezmsg.builtins.websocket import WebsocketSettings
 
 from hololight.go_task import GoTaskSettings
-from hololight.modeltraining import ModelTrainingLogicSettings, ModelTrainingSettings
+from hololight.modeltraining import ModelTrainingLogicSettings, ModelTrainingSettings, TestSignalInjectorSettings
 
 from .messagelogger import MessageLoggerSettings
 from .shallowfbcspdecoder import ShallowFBCSPDecoderSettings
@@ -138,6 +138,9 @@ if __name__ == "__main__":
         modeltraining_settings = ModelTrainingSettings(
             settings = ModelTrainingLogicSettings(
                 recording_dir = args.output 
+            ),
+            testsignal_settings = TestSignalInjectorSettings(
+                enabled = True if args.device == 'simulator' else False
             ),
             websocket_settings = WebsocketSettings(
                 host = "0.0.0.0",

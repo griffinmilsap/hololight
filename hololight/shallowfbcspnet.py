@@ -50,6 +50,12 @@ class Expression( th.nn.Module ):
         else:
             expression_str = repr( self.expression_fn )
         return f'{ self.__class__.__name__ }(expression={ str( expression_str ) })'
+    
+class Ensure4d( nn.Module ):
+    def forward( self, x ):
+        while( len( x.shape ) < 4 ):
+            x = x.unsqueeze( -1 )
+        return x
 
 # remove empty dim at end and potentially remove empty time dim
 # do not just use squeeze as we never want to remove first dim
@@ -106,6 +112,8 @@ class ShallowFBCSPNet:
 
         pool_class = dict( max = nn.MaxPool2d, mean = nn.AvgPool2d )[ self.pool_mode ]
         model = nn.Sequential()
+        
+        model.add_module( "ensuredims", Ensure4d() )
 
         if self.split_first_layer:
             model.add_module( "dimshuffle", Expression( _transpose_time_to_spat ) )
