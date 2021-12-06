@@ -186,6 +186,10 @@ class TrainingAPI( ez.Unit ):
             ) 
         )
 
+    @ez.subscriber( INPUT_TASK )
+    async def on_task_stage( self, task_msg: GoTaskMessage ):
+        print( task_msg )
+
 
 
 class ModelTrainingSettings( ez.Settings ):
@@ -244,5 +248,6 @@ class ModelTraining( ez.Collection ):
             # Training API
             ( self.SERVER.OUTPUT, self.API.INPUT_FROM_WEBSOCKET ),
             ( self.API.OUTPUT_TO_WEBSOCKET, self.SERVER.INPUT ),
-            ( self.API.OUTPUT_TRAINING, self.LOGIC.INPUT_TRAIN )
+            ( self.API.OUTPUT_TRAINING, self.LOGIC.INPUT_TRAIN ),
+            ( self.GOTASK.OUTPUT_TASK, self.API.INPUT_TASK )
         )

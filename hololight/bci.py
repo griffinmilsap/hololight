@@ -64,7 +64,7 @@ if __name__ == "__main__":
         '--powerdown',
         type = str,
         help = 'Channels to disconnect/powerdown',
-        default = '00011111'
+        default = '00111111'
     )
 
     parser.add_argument(
@@ -140,7 +140,8 @@ if __name__ == "__main__":
                 recording_dir = args.output 
             ),
             testsignal_settings = TestSignalInjectorSettings(
-                enabled = True if args.device == 'simulator' else False
+                # enabled = True if args.device == 'simulator' else False
+                enabled = False
             ),
             websocket_settings = WebsocketSettings(
                 host = "0.0.0.0",

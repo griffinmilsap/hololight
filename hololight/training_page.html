@@ -5,7 +5,10 @@
         <script type = "text/javascript">
             function WebSocketTest() {
                 if ( "WebSocket" in window ) {
-                    var ws = new WebSocket( "ws://localhost:8082" );
+                    
+                    // var hostname = "ws://holobci.local:8082";
+                    var hostname = "ws://localhost:8082";
+                    var ws = new WebSocket( hostname );
 
                     ws.onopen = function() {
                         ws.send( "HELLO" );
