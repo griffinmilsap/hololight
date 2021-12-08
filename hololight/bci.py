@@ -19,6 +19,7 @@ from hololight.modeltraining import ModelTrainingLogicSettings, ModelTrainingSet
 from .messagelogger import MessageLoggerSettings
 from .shallowfbcspdecoder import ShallowFBCSPDecoderSettings
 from .hololightsystem import HololightSystem, HololightSystemSettings
+from .hue import HueDemoSettings
 
 from typing import (
     Dict,
@@ -96,6 +97,13 @@ if __name__ == "__main__":
         default = Path( '.' ) / "recordings"
     )
 
+    parser.add_argument(
+        '--bridge',
+        type = str,
+        help = 'Hostname for Philips Hue Bridge',
+        default = None
+    )
+
     args = parser.parse_args()
 
     gain_map: Dict[ int, GainState ] = {
@@ -147,6 +155,9 @@ if __name__ == "__main__":
                 host = "0.0.0.0",
                 port = 8082
             )
+        ),
+        huedemo_settings = HueDemoSettings(
+            bridge_host = args.bridge
         )
     )
 

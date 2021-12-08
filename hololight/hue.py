@@ -11,7 +11,7 @@ from typing import (
 
 class HueDemoSettings( ez.Settings ):
     trigger_class: int = 1
-    trigger_thresh: float = 0.5
+    trigger_thresh: float = 0.9
     bridge_host: Optional[ str ] = None
 
 class HueDemoState( ez.State ):
@@ -61,7 +61,9 @@ class HueDemo( ez.Unit ):
                     self.set_lights( self.STATE.lights_on )
 
 
-
+    @ez.main
+    def dummy( self ):
+        pass
 
 
 

@@ -43,6 +43,7 @@ class ShallowFBSCPDecoder( ez.Unit ):
             self.load_model( self.SETTINGS.model_file )
 
     def load_model( self, model_file: Path ) -> None:
+        print( 'Model Loaded:', model_file )
         self.STATE.checkpoint = torch.load( model_file, map_location = 'cpu' )
         self.STATE.model = self.STATE.checkpoint[ 'model_definition' ].construct()
         self.STATE.model.load_state_dict( self.STATE.checkpoint[ 'model_state_dict' ] )
