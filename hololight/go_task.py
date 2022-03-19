@@ -6,7 +6,7 @@ from enum import Enum
 
 import ezmsg as ez
 
-from ezbci.stampedmessage import StampedMessage
+from ezmsg.ezbci.stampedmessage import StampedMessage
 
 from typing import (
     Any,

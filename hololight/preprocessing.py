@@ -1,10 +1,10 @@
 import ezmsg as ez
 
-from ezbci.eegmessage import EEGMessage
-from ezbci.decimate import Decimate, DownsampleSettings
-from ezbci.butterworthfilter import ButterworthFilter, ButterworthFilterSettings
-from ezbci.ewmfilter import EWMFilter, EWMFilterSettings
-from ezbci.window import Window, WindowSettings
+from ezmsg.ezbci.eegmessage import EEGMessage
+from ezmsg.ezbci.decimate import Decimate, DownsampleSettings
+from ezmsg.ezbci.butterworthfilter import ButterworthFilter, ButterworthFilterSettings
+from ezmsg.ezbci.ewmfilter import EWMFilter, EWMFilterSettings
+from ezmsg.ezbci.window import Window, WindowSettings
 
 class PreprocessingSettings( ez.Settings ):
     # 1. Bandpass Filter

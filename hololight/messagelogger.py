@@ -10,7 +10,7 @@ from pathlib import Path
 import ezmsg as ez
 import numpy as np
 
-from ezbci.timeseriesmessage import TimeSeriesMessage, TimeSeriesInfoMessage
+from ezmsg.ezbci.timeseriesmessage import TimeSeriesMessage, TimeSeriesInfoMessage
 
 from typing import (
     Optional,

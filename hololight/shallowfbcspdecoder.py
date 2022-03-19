@@ -4,8 +4,9 @@ import numpy as np
 import torch
 import ezmsg as ez
 
-from ezbci.eegmessage import EEGMessage, EEGInfoMessage, EEGDataMessage
-from ezbci.stampedmessage import StampedMessage
+from ezmsg.ezbci.eegmessage import EEGMessage, EEGInfoMessage, EEGDataMessage
+from ezmsg.ezbci.stampedmessage import StampedMessage
+
 from .shallowfbcspnet import ShallowFBCSPNet
 
 from typing import ( 

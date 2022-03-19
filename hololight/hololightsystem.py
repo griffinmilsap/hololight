@@ -1,7 +1,7 @@
 from dataclasses import field
 import ezmsg as ez
 
-from ezbci.openbci.openbci import OpenBCISource, OpenBCISourceSettings
+from ezmsg.ezbci.openbci.openbci import OpenBCISource, OpenBCISourceSettings
 
 from .modeltraining import ModelTraining, ModelTrainingSettings
 from .preprocessing import Preprocessing, PreprocessingSettings

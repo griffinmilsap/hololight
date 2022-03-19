@@ -3,7 +3,7 @@ from pathlib import Path
 
 import ezmsg as ez
 
-from ezbci.openbci.openbci import (
+from ezmsg.ezbci.openbci.openbci import (
     OpenBCISourceSettings, 
     GainState,
     PowerStatus,
@@ -11,11 +11,15 @@ from ezbci.openbci.openbci import (
     OpenBCIChannelConfigSettings,
     OpenBCIChannelSetting,
 )
+
 from ezmsg.builtins.websocket import WebsocketSettings
 
-from hololight.go_task import GoTaskSettings
-from hololight.modeltraining import ModelTrainingLogicSettings, ModelTrainingSettings, TestSignalInjectorSettings
-
+from .go_task import GoTaskSettings
+from .modeltraining import ( 
+    ModelTrainingLogicSettings, 
+    ModelTrainingSettings, 
+    TestSignalInjectorSettings
+)
 from .messagelogger import MessageLoggerSettings
 from .shallowfbcspdecoder import ShallowFBCSPDecoderSettings
 from .hololightsystem import HololightSystem, HololightSystemSettings

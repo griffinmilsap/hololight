@@ -7,7 +7,7 @@ import time
 import ezmsg as ez
 
 from ezmsg.builtins.websocket import WebsocketServer, WebsocketSettings
-from ezbci.eegmessage import EEGInfoMessage, EEGMessage, EEGDataMessage
+from ezmsg.ezbci.eegmessage import EEGInfoMessage, EEGMessage, EEGDataMessage
 
 from .go_task import GoTask, GoTaskMessage, GoTaskSettings, GoTaskStage
 from .messagelogger import MessageLogger, MessageLoggerSettings
