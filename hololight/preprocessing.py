@@ -1,10 +1,10 @@
-import ezmsg as ez
+import ezmsg.core as ez
 
-from ezmsg.ezbci.eegmessage import EEGMessage
-from ezmsg.ezbci.decimate import Decimate, DownsampleSettings
-from ezmsg.ezbci.butterworthfilter import ButterworthFilter, ButterworthFilterSettings
-from ezmsg.ezbci.ewmfilter import EWMFilter, EWMFilterSettings
-from ezmsg.ezbci.window import Window, WindowSettings
+from ezmsg.eeg.eegmessage import EEGMessage
+from ezmsg.sigproc.decimate import Decimate, DownsampleSettings
+from ezmsg.sigproc.butterworthfilter import ButterworthFilter, ButterworthFilterSettings
+from ezmsg.sigproc.ewmfilter import EWMFilter, EWMFilterSettings
+from ezmsg.sigproc.window import Window, WindowSettings
 
 class PreprocessingSettings( ez.Settings ):
     # 1. Bandpass Filter

@@ -1,14 +1,14 @@
 from dataclasses import field
-import ezmsg as ez
+import ezmsg.core as ez
 
-from ezmsg.ezbci.openbci.openbci import OpenBCISource, OpenBCISourceSettings
+from ezmsg.eeg.openbci import OpenBCISource, OpenBCISourceSettings
 
 from .modeltraining import ModelTraining, ModelTrainingSettings
 from .preprocessing import Preprocessing, PreprocessingSettings
 from .shallowfbcspdecoder import ShallowFBSCPDecoder, ShallowFBCSPDecoderSettings
 from .hue import HueDemo, HueDemoSettings
 
-from typing import Any
+from typing import Any, Tuple
 
 class DebugPrint( ez.Unit ):
 
@@ -58,5 +58,8 @@ class HololightSystem( ez.System ):
             ( self.DECODER.OUTPUT_DECODE, self.HUE.INPUT_DECODE ),
             ( self.PREPROC.OUTPUT_SIGNAL, self.TRAINING.INPUT_SIGNAL ),
         )
+
+    def process_components( self ) -> Tuple[ ez.Component, ... ]:
+        return ( self.HUE, self.TRAINING )
 
 

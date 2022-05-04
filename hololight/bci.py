@@ -1,9 +1,9 @@
 import time
 from pathlib import Path
 
-import ezmsg as ez
+import ezmsg.core as ez
 
-from ezmsg.ezbci.openbci.openbci import (
+from ezmsg.eeg.openbci import (
     OpenBCISourceSettings, 
     GainState,
     PowerStatus,
@@ -12,7 +12,12 @@ from ezmsg.ezbci.openbci.openbci import (
     OpenBCIChannelSetting,
 )
 
-from ezmsg.builtins.websocket import WebsocketSettings
+from ezmsg.util.messagelogger import ( 
+    MessageLogger, 
+    MessageLoggerSettings
+)
+
+from ezmsg.websocket import WebsocketSettings
 
 from .go_task import GoTaskSettings
 from .modeltraining import ( 
@@ -20,7 +25,6 @@ from .modeltraining import (
     ModelTrainingSettings, 
     TestSignalInjectorSettings
 )
-from .messagelogger import MessageLoggerSettings
 from .shallowfbcspdecoder import ShallowFBCSPDecoderSettings
 from .hololightsystem import HololightSystem, HololightSystemSettings
 from .hue import HueDemoSettings

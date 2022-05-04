@@ -2,10 +2,10 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import ezmsg as ez
+import ezmsg.core as ez
 
-from ezmsg.ezbci.eegmessage import EEGMessage, EEGInfoMessage, EEGDataMessage
-from ezmsg.ezbci.stampedmessage import StampedMessage
+from ezmsg.eeg.eegmessage import EEGMessage, EEGInfoMessage, EEGDataMessage
+from ezmsg.util.stampedmessage import StampedMessage
 
 from .shallowfbcspnet import ShallowFBCSPNet
 

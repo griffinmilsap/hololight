@@ -4,9 +4,10 @@ import random
 
 from enum import Enum
 
-import ezmsg as ez
+import ezmsg.core as ez
 
-from ezmsg.ezbci.stampedmessage import StampedMessage
+from ezmsg.util.stampedmessage import StampedMessage
+from ezmsg.testing.debuglog import DebugLog
 
 from typing import (
     Any,
@@ -90,14 +91,6 @@ class GoTask( ez.Unit ):
             stage = GoTaskStage.COMPLETE
         ) )
 
-class _DebugPrint( ez.Unit ):
-
-    INPUT = ez.InputStream( Any )
-
-    @ez.subscriber( INPUT )
-    async def on_message( self, message: Any ) -> None:
-        print( message )
-
 class _TaskKickoffSettings( ez.Settings ):
     n_classes: int = 2
     autostart_delay: Optional[ float ] = None
@@ -124,7 +117,7 @@ class _GoTaskSystem( ez.System ):
 
     KICKOFF = _TaskKickoff()
     TASK = GoTask()
-    PRINT = _DebugPrint()
+    PRINT = DebugLog()
 
     def configure( self ) -> None:
         self.TASK.apply_settings( self.SETTINGS.gotask_settings )

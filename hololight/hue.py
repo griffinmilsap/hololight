@@ -1,4 +1,4 @@
-import ezmsg as ez
+import ezmsg.core as ez
 import numpy as np
 
 from phue import Bridge

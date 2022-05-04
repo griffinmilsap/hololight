@@ -1,9 +1,9 @@
-import ezmsg as ez
+import ezmsg.core as ez
 
 from serialize import Deserialize
 from plotter import Plotter
 
-from ezmsg.builtins.websocket import WebsocketClient, WebsocketSettings
+from ezmsg.websocket import WebsocketClient, WebsocketSettings
 
 class JoyRecorderVizSettings( ez.Settings ):
     client_settings: WebsocketSettings

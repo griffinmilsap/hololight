@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-from ezmsg.ezbci.eegmessage import EEGMessage
+from ezmsg.eeg.eegmessage import EEGMessage
 
 import ezmsg as ez
 

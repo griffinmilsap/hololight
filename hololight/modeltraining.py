@@ -4,18 +4,19 @@ from dataclasses import field, replace
 from pathlib import Path
 import time
 
-import ezmsg as ez
+import ezmsg.core as ez
 
-from ezmsg.builtins.websocket import WebsocketServer, WebsocketSettings
-from ezmsg.ezbci.eegmessage import EEGInfoMessage, EEGMessage, EEGDataMessage
+from ezmsg.websocket import WebsocketServer, WebsocketSettings
+from ezmsg.eeg.eegmessage import EEGMessage
+from ezmsg.util.messagelogger import MessageLogger, MessageLoggerSettings
 
 from .go_task import GoTask, GoTaskMessage, GoTaskSettings, GoTaskStage
-from .messagelogger import MessageLogger, MessageLoggerSettings
 
 from typing import (
     AsyncGenerator,
     ByteString,
-    Optional
+    Optional,
+    Tuple
 )
 
 class ModelTrainingMessage( ez.Message ):
@@ -106,7 +107,6 @@ class TestSignalInjectorSettings( ez.Settings ):
     enabled: bool = False
 
 class TestSignalInjectorState( ez.State ):
-    info: Optional[ EEGInfoMessage ] = None
     task_state: Optional[ GoTaskMessage ] = None
     cur_sample: int = 0
 
@@ -134,25 +134,21 @@ class TestSignalInjector( ez.Unit ):
             yield ( self.OUTPUT_SIGNAL, message )
             return
 
-        if isinstance( message, EEGInfoMessage ):
-            self.STATE.info = message
+        if self.STATE.info is not None:
+            if self.STATE.task_state is not None:
 
-        elif isinstance( message, EEGDataMessage ):
-            if self.STATE.info is not None:
-                if self.STATE.task_state is not None:
+                # On intertrial periods, we reset test signal phase
+                if self.STATE.task_state.stage == GoTaskStage.INTERTRIAL:
+                    self.STATE.cur_sample = 0
 
-                    # On intertrial periods, we reset test signal phase
-                    if self.STATE.task_state.stage == GoTaskStage.INTERTRIAL:
-                        self.STATE.cur_sample = 0
-
-                    # On activity periods, we add a test signal to the data stream
-                    elif self.STATE.task_state.stage == GoTaskStage.ACTIVITY:
-                        freq = 10.0 + ( 5.0 * self.STATE.task_state.trial_class )
-                        t = np.arange( self.STATE.info.n_time ) + self.STATE.cur_sample
-                        self.STATE.cur_sample += self.STATE.info.n_time
-                        signal = np.sin( 2.0 * np.pi * freq * ( t / self.STATE.info.fs ) )
-                        message = replace( message, data = ( message.data.T + signal ).T ) # broadcasting
-                        print( f'Injecting {freq} hz signal for class {self.STATE.task_state.trial_class}...' )
+                # On activity periods, we add a test signal to the data stream
+                elif self.STATE.task_state.stage == GoTaskStage.ACTIVITY:
+                    freq = 10.0 + ( 5.0 * self.STATE.task_state.trial_class )
+                    t = np.arange( self.STATE.info.n_time ) + self.STATE.cur_sample
+                    self.STATE.cur_sample += self.STATE.info.n_time
+                    signal = np.sin( 2.0 * np.pi * freq * ( t / self.STATE.info.fs ) )
+                    message = replace( message, data = ( message.data.T + signal ).T ) # broadcasting
+                    print( f'Injecting {freq} hz signal for class {self.STATE.task_state.trial_class}...' )
 
         yield ( self.OUTPUT_SIGNAL, message )
 
@@ -251,3 +247,6 @@ class ModelTraining( ez.Collection ):
             ( self.API.OUTPUT_TRAINING, self.LOGIC.INPUT_TRAIN ),
             ( self.GOTASK.OUTPUT_TASK, self.API.INPUT_TASK )
         )
+
+    def process_components( self ) -> Tuple[ ez.Component, ... ]:
+        return ( self.LOGGER,  )
