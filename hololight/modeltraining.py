@@ -132,25 +132,23 @@ class TestSignalInjector( ez.Unit ):
         # If the module isn't enabled, we just passthrough and republish
         if not self.SETTINGS.enabled:
             yield ( self.OUTPUT_SIGNAL, message )
-            return
 
-        if self.STATE.info is not None:
-            if self.STATE.task_state is not None:
+        elif self.STATE.task_state is not None:
 
-                # On intertrial periods, we reset test signal phase
-                if self.STATE.task_state.stage == GoTaskStage.INTERTRIAL:
-                    self.STATE.cur_sample = 0
+            # On intertrial periods, we reset test signal phase
+            if self.STATE.task_state.stage == GoTaskStage.INTERTRIAL:
+                self.STATE.cur_sample = 0
 
-                # On activity periods, we add a test signal to the data stream
-                elif self.STATE.task_state.stage == GoTaskStage.ACTIVITY:
-                    freq = 10.0 + ( 5.0 * self.STATE.task_state.trial_class )
-                    t = np.arange( self.STATE.info.n_time ) + self.STATE.cur_sample
-                    self.STATE.cur_sample += self.STATE.info.n_time
-                    signal = np.sin( 2.0 * np.pi * freq * ( t / self.STATE.info.fs ) )
-                    message = replace( message, data = ( message.data.T + signal ).T ) # broadcasting
-                    print( f'Injecting {freq} hz signal for class {self.STATE.task_state.trial_class}...' )
+            # On activity periods, we add a test signal to the data stream
+            elif self.STATE.task_state.stage == GoTaskStage.ACTIVITY:
+                freq = 10.0 + ( 5.0 * self.STATE.task_state.trial_class )
+                t = np.arange( message.n_time ) + self.STATE.cur_sample
+                self.STATE.cur_sample += message.n_time
+                signal = np.sin( 2.0 * np.pi * freq * ( t / message.fs ) )
+                message = replace( message, data = ( message.data.T + signal ).T ) # broadcasting
+                print( f'Injecting {freq} hz signal for class {self.STATE.task_state.trial_class}...' )
 
-        yield ( self.OUTPUT_SIGNAL, message )
+            yield ( self.OUTPUT_SIGNAL, message )
 
 import json
 

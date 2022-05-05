@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import ezmsg.core as ez
 
-from ezmsg.eeg.eegmessage import EEGMessage, EEGInfoMessage, EEGDataMessage
+from ezmsg.eeg.eegmessage import EEGMessage
 from ezmsg.util.stampedmessage import StampedMessage
 
 from .shallowfbcspnet import ShallowFBCSPNet
@@ -23,7 +23,6 @@ class ShallowFBCSPDecoderSettings( ez.Settings ):
     model_file: Optional[ Path ] = None
 
 class ShallowFBCSPDecoderState( ez.State ):
-    info: Optional[ EEGInfoMessage ] = None
     checkpoint: Optional[ Dict[ str, Any ] ] = None
     model: Optional[ torch.nn.Sequential ] = None
 
@@ -58,27 +57,23 @@ class ShallowFBSCPDecoder( ez.Unit ):
     @ez.publisher( OUTPUT_DECODE )
     async def decode( self, message: EEGMessage ) -> AsyncGenerator:
 
-        if isinstance( message, EEGInfoMessage ):
-            self.STATE.info = message
+        if self.STATE.model is None: 
+            return
 
-        elif isinstance( message, EEGDataMessage ):
-            if self.STATE.info is None: return
-            if self.STATE.model is None: return
+        # Perform Inference
+        self.STATE.model.eval()
 
-            # Perform Inference
-            self.STATE.model.eval()
+        with torch.no_grad():
+            # Input to model is batch x ch x time x 1
+            dim_order = ( message.ch_dim, message.time_dim )
+            in_data: np.ndarray = np.transpose( message.data, dim_order )
+            in_data = in_data[ np.newaxis, ..., np.newaxis ]
+            in_tensor = torch.tensor( in_data.astype( np.float32 ), dtype = torch.float32 )
 
-            with torch.no_grad():
-                # Input to model is batch x ch x time x 1
-                dim_order = ( self.STATE.info.ch_dim, self.STATE.info.time_dim )
-                in_data: np.ndarray = np.transpose( message.data, dim_order )
-                in_data = in_data[ np.newaxis, ..., np.newaxis ]
-                in_tensor = torch.tensor( in_data.astype( np.float32 ), dtype = torch.float32 )
+            output: torch.Tensor = self.STATE.model( in_tensor )
+            out_probs = np.array( output.tolist() )[ 0, : ]
 
-                output: torch.Tensor = self.STATE.model( in_tensor )
-                out_probs = np.array( output.tolist() )[ 0, : ]
-
-            yield( self.OUTPUT_DECODE, DecoderOutput( output = out_probs ) )
+        yield( self.OUTPUT_DECODE, DecoderOutput( output = out_probs ) )
 
             
 
