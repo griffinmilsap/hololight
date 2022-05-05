@@ -233,7 +233,7 @@ class ModelTraining( ez.Collection ):
             ( self.INPUT_SIGNAL, self.TEST.INPUT_SIGNAL ),
 
             # Inputs to Data Logger
-            ( self.TEST.OUTPUT_SIGNAL, self.LOGGER.INPUT_SIGNAL ),
+            ( self.TEST.OUTPUT_SIGNAL, self.LOGGER.INPUT_MESSAGE ),
             ( self.LOGIC.OUTPUT_LOG_START, self.LOGGER.INPUT_START ),
             ( self.INPUT_LOGGER, self.LOGGER.INPUT_MESSAGE ),
             ( self.GOTASK.OUTPUT_TASK, self.LOGGER.INPUT_MESSAGE ),
