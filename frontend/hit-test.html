@@ -34,9 +34,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   <body>
     <header>
       <details open>
-        <summary>Hit Test</summary>
+        <summary>Hololens Demo</summary>
         <p>
-          This sample demonstrates the use of hit testing to place virtual objects on real-world surfaces.
+          Air tap to place markers where the Philips Hue lightbulbs are.
           <a class="back" href="./">Back</a>
         </p>
       </details>
@@ -82,6 +82,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
       const MAX_FLOWERS = 30;
       let flowers = [];
+
+      // Initiate websocket
+      const ws = new Websocket("ws://localhost:8082")
+      socket.send("Websocket connection initiated.")
 
       // Ensure the background is transparent for AR.
       scene.clear = false;
@@ -183,6 +187,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           // so we can just use it's matrix to save an unnecessary call to 
           // event.frame.getHitTestResults.
           addARObjectAt(reticle.matrix);
+          ws.send(reticle.matrix)
         }
       }
 
