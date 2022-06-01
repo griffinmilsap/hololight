@@ -14,8 +14,12 @@ $ source env/bin/activate
 ```
 
 ## Run
+Simultaneously:
 ```
 (env) $ python -m hololight.bci
+```
+```
+(env) $ python frontend/serve.py
 ```
 
 ## TODO
