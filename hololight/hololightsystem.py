@@ -1,4 +1,6 @@
 from dataclasses import field
+from pathlib import Path
+import os
 import ezmsg.core as ez
 
 from ezmsg.eeg.openbci import OpenBCISource, OpenBCISourceSettings
@@ -46,6 +48,8 @@ class HololightSystem( ez.System ):
     WS_SERVER = WebsocketServer()
     WS_MESSAGES = MessageLogger() 
 
+    CERT = os.environ.get('LOCAL_CERT')
+
     def configure( self ) -> None:
         self.SOURCE.apply_settings( self.SETTINGS.openbcisource_settings )
         self.PREPROC.apply_settings( self.SETTINGS.preprocessing_settings )
@@ -53,11 +57,12 @@ class HololightSystem( ez.System ):
         self.TRAINING.apply_settings( self.SETTINGS.modeltraining_settings )
         self.HUE.apply_settings( self.SETTINGS.huedemo_settings )
         self.WS_SERVER.apply_settings( WebsocketSettings(
-            host="127.0.0.1",
-            port="8082"
+            host="0.0.0.0",
+            port="8082",
+            cert_path=self.CERT
         ) )
         self.WS_MESSAGES.apply_settings( MessageLoggerSettings(
-            output="websocket_messages.json"
+            output=Path("websocket_messages.json")
         ))
 
     # TODO: figure out where websocket input should go and add it to relevant module
@@ -73,6 +78,7 @@ class HololightSystem( ez.System ):
             ( self.PREPROC.OUTPUT_SIGNAL, self.TRAINING.INPUT_SIGNAL ),
 
             ( self.WS_SERVER.OUTPUT, self.WS_MESSAGES.INPUT_MESSAGE )
+            ( self.WS_SERVER.OUTPUT, self.HUE.INPUT_HOLOLENS )
         )
 
     def process_components( self ) -> Tuple[ ez.Component, ... ]:

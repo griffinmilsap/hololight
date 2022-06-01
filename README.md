@@ -6,9 +6,11 @@
 $ python3 -m venv env
 $ source env/bin/activate
 (env) $ pip install --upgrade pip
-(env) $ pip install ../path/to/ezmsg
-(env) $ pip install ../path/to/ezbci
-(env) $ pip install -r requirements.txt
+(env) $ pip install -e ../path/to/ezmsg
+(env) $ pip install -e ../path/to/ezmsg/extensions/ezmsg-sigproc
+(env) $ pip install -e ../path/to/ezmsg/extensions/ezmsg-eeg
+(env) $ pip install -e ../path/to/ezmsg/extensions/ezmsg-websocket
+(env) $ pip install -e .
 ```
 
 ## Run

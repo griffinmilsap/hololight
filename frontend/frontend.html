@@ -19,6 +19,11 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 -->
+
+<!--
+  "Lightbulb" (https://skfb.ly/6RzwQ) by Autaritus is licensed under Creative
+  Commons Attribution (http://creativecommons.org/licenses/by/4.0/).
+-->
 <html>
   <head>
     <meta charset="utf-8">
@@ -27,7 +32,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     <meta name="apple-mobile-web-app-capable" content="yes">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png">
-    <link rel="stylesheet" href="css/common.css">
 
     <title>Hit Test</title>
   </head>
@@ -37,7 +41,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         <summary>Hololens Demo</summary>
         <p>
           Air tap to place markers where the Philips Hue lightbulbs are.
-          <a class="back" href="./">Back</a>
         </p>
       </details>
     </header>
@@ -56,6 +59,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       let xrRefSpace = null;
       let xrViewerSpace = null;
       let xrHitTestSource = null;
+      let ws_global;
 
       // WebGL scene globals.
       let gl = null;
@@ -67,10 +71,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       arObject.visible = false;
       scene.addNode(arObject);
 
-      let flower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
+      // let flower = new Gltf2Node({url: 'assets/sunflower.gltf'});
+      let flower = new Gltf2Node({url: 'assets/lightbulb.gltf'});
       arObject.addNode(flower);
 
-      let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
+      let reticle = new Gltf2Node({url: 'assets/reticle.gltf'});
       reticle.visible = false;
       scene.addNode(reticle);
 
@@ -83,12 +88,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       const MAX_FLOWERS = 30;
       let flowers = [];
 
-      // Initiate websocket
-      const ws = new Websocket("ws://localhost:8082")
-      socket.send("Websocket connection initiated.")
-
       // Ensure the background is transparent for AR.
       scene.clear = false;
+
+      function connectToWebsocket() {
+        return new Promise(function(resolve, reject) {
+          const ws = new WebSocket('wss://192.168.0.138:8082');
+          ws.onopen = function() {
+            resolve(ws);
+          };
+          ws.onerror = function(err) {
+            reject(err);
+          };
+        });
+      }
 
       function initXR() {
         xrButton = new WebXRButton({
@@ -187,7 +200,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           // so we can just use it's matrix to save an unnecessary call to 
           // event.frame.getHitTestResults.
           addARObjectAt(reticle.matrix);
-          ws.send(reticle.matrix)
         }
       }
 
@@ -195,6 +207,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       function onXRFrame(t, frame) {
         let session = frame.session;
         let pose = frame.getViewerPose(xrRefSpace);
+
+        // ws_global.send("hello again ezmsg")
 
         reticle.visible = false;
 
@@ -204,6 +218,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
             let pose = hitTestResults[0].getPose(xrRefSpace);
+            console.log(pose)
             reticle.visible = true;
             reticle.matrix = pose.transform.matrix;
           }
@@ -215,11 +230,25 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         scene.drawXRFrame(frame, pose);
 
+        const x = pose[12]
+        const y = pose[13]
+        const z = pose[14]
+        // Get euclidean distance of current pose from all flowers
+        // If any flowers are within a certain distance of the pose
+        // Broadcast its index via websocket
+        console.log(flowers)
+
         scene.endFrame();
       }
 
       // Start the XR application.
-      initXR();
+      connectToWebsocket().then(function(ws) {
+        ws_global = ws;
+        ws_global.send("hello ezmsg!")
+        initXR();
+      }).catch(function(err) {
+        console.log("Websocket connection failed")
+      })
     </script>
   </body>
 </html>
