@@ -77,7 +77,7 @@ class HololightSystem( ez.System ):
             ( self.DECODER.OUTPUT_DECODE, self.HUE.INPUT_DECODE ),
             ( self.PREPROC.OUTPUT_SIGNAL, self.TRAINING.INPUT_SIGNAL ),
 
-            ( self.WS_SERVER.OUTPUT, self.WS_MESSAGES.INPUT_MESSAGE )
+            ( self.WS_SERVER.OUTPUT, self.WS_MESSAGES.INPUT_MESSAGE ),
             ( self.WS_SERVER.OUTPUT, self.HUE.INPUT_HOLOLENS )
         )
 

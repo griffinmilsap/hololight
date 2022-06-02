@@ -71,8 +71,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       arObject.visible = false;
       scene.addNode(arObject);
 
-      // let flower = new Gltf2Node({url: 'assets/sunflower.gltf'});
-      let flower = new Gltf2Node({url: 'assets/lightbulb.gltf'});
+      let flower = new Gltf2Node({url: 'assets/sunflower.gltf'});
+      // let flower = new Gltf2Node({url: 'assets/lightbulb.gltf'});
       arObject.addNode(flower);
 
       let reticle = new Gltf2Node({url: 'assets/reticle.gltf'});
@@ -208,8 +208,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         let session = frame.session;
         let pose = frame.getViewerPose(xrRefSpace);
 
-        // ws_global.send("hello again ezmsg")
-
         reticle.visible = false;
 
         // If we have a hit test source, get its results for the frame
@@ -218,7 +216,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
             let pose = hitTestResults[0].getPose(xrRefSpace);
-            console.log(pose)
             reticle.visible = true;
             reticle.matrix = pose.transform.matrix;
           }
@@ -230,13 +227,38 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         scene.drawXRFrame(frame, pose);
 
-        const x = pose[12]
-        const y = pose[13]
-        const z = pose[14]
+        const reticlex = reticle.matrix[12]
+        const reticley = reticle.matrix[13]
+        const reticlez = reticle.matrix[14]
+
         // Get euclidean distance of current pose from all flowers
         // If any flowers are within a certain distance of the pose
-        // Broadcast its index via websocket
-        console.log(flowers)
+        // Broadcast the index of the closest one via websocket
+        // Todo: clean up math!
+
+        let closestFlowerDistance;
+        let closestFlower;
+        flowers.forEach(function(flower, i) {
+          const flowerx = flower.matrix[12]
+          const flowery = flower.matrix[13]
+          const flowerz = flower.matrix[14]
+
+          const distance = Math.hypot(reticlex-flowerx, reticley-flowery, reticlez-flowerz)
+          if (distance <= 0.33) {
+            if (closestFlower !== undefined) {  // a flower has already been added
+              if (closestFlowerDistance > distance) {
+                closestFlower = i
+                closestFlowerDistance = distance
+              }
+            } else {
+              closestFlower = i
+              closestFlowerDistance = distance
+            }
+          }
+        })
+        if (closestFlower !== undefined) {
+          ws_global.send(closestFlower.toString())
+        }
 
         scene.endFrame();
       }

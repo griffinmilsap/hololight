@@ -13,6 +13,8 @@ $ source env/bin/activate
 (env) $ pip install -e .
 ```
 
+The web frontend must be served with HTTPS. Obtain a .pem file and save it as an environment variable named "LOCAL_CERT".
+
 ## Run
 Simultaneously:
 ```
