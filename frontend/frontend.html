@@ -93,7 +93,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
       function connectToWebsocket() {
         return new Promise(function(resolve, reject) {
-          const ws = new WebSocket('wss://192.168.0.138:8082');
+          const hostname = location.hostname
+          const ws = new WebSocket('wss://' + hostname + ':8082');
           ws.onopen = function() {
             resolve(ws);
           };

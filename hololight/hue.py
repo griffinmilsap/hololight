@@ -6,7 +6,8 @@ from phue import Bridge
 from .shallowfbcspdecoder import DecoderOutput
 
 from typing import (
-    Optional
+    Optional,
+    ByteString
 )
 
 class HueDemoSettings( ez.Settings ):
@@ -14,6 +15,7 @@ class HueDemoSettings( ez.Settings ):
     trigger_thresh: float = 0.9
     bridge_host: Optional[ str ] = None
 
+# Turn lights_on into a vector of bools
 class HueDemoState( ez.State ):
     lights_on: bool = False
     decode_class: Optional[ int ] = None
@@ -24,6 +26,7 @@ class HueDemo( ez.Unit ):
     STATE: HueDemoState
 
     INPUT_DECODE = ez.InputStream( DecoderOutput )
+    INPUT_HOLOLENS = ez.InputStream( ByteString )
 
     def initialize( self ) -> None:
         if self.SETTINGS.bridge_host:
@@ -41,6 +44,11 @@ class HueDemo( ez.Unit ):
                 if light.reachable:
                     light.on = on
 
+    # Create new subscriber for websocket input
+    # Post most recently received message to state
+
+    # If timestamp on ws message in state is older than a half second, don't use it
+    # If timestamp is recent enough, turn light on
     @ez.subscriber( INPUT_DECODE )
     async def on_decode( self, decode: DecoderOutput ) -> None:
         probs = np.exp( decode.output )
@@ -59,7 +67,6 @@ class HueDemo( ez.Unit ):
                 if cur_class == self.SETTINGS.trigger_class:
                     self.STATE.lights_on = not self.STATE.lights_on
                     self.set_lights( self.STATE.lights_on )
-
 
     @ez.main
     def dummy( self ):
