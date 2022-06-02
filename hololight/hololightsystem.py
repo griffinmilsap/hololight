@@ -4,13 +4,14 @@ import os
 import ezmsg.core as ez
 
 from ezmsg.eeg.openbci import OpenBCISource, OpenBCISourceSettings
-from ezmsg.websocket import WebsocketServer, WebsocketSettings
+from ezmsg.websocket import WebsocketSettings
 from ezmsg.util.messagelogger import MessageLogger, MessageLoggerSettings
 
 from .modeltraining import ModelTraining, ModelTrainingSettings
 from .preprocessing import Preprocessing, PreprocessingSettings
 from .shallowfbcspdecoder import ShallowFBSCPDecoder, ShallowFBCSPDecoderSettings
 from .hue import HueDemo, HueDemoSettings
+from .stamped_websocket_server import StampedWebsocketServer
 
 from typing import Any, Tuple
 
@@ -45,7 +46,7 @@ class HololightSystem( ez.System ):
 
     DEBUG = DebugPrint()
 
-    WS_SERVER = WebsocketServer()
+    WS_SERVER = StampedWebsocketServer()
     WS_MESSAGES = MessageLogger() 
 
     CERT = os.environ.get('LOCAL_CERT')
@@ -77,8 +78,8 @@ class HololightSystem( ez.System ):
             ( self.DECODER.OUTPUT_DECODE, self.HUE.INPUT_DECODE ),
             ( self.PREPROC.OUTPUT_SIGNAL, self.TRAINING.INPUT_SIGNAL ),
 
-            ( self.WS_SERVER.OUTPUT, self.WS_MESSAGES.INPUT_MESSAGE ),
-            ( self.WS_SERVER.OUTPUT, self.HUE.INPUT_HOLOLENS )
+            ( self.WS_SERVER.OUTPUT_MESSAGE, self.WS_MESSAGES.INPUT_MESSAGE ),
+            ( self.WS_SERVER.OUTPUT_MESSAGE, self.HUE.INPUT_HOLOLENS )
         )
 
     def process_components( self ) -> Tuple[ ez.Component, ... ]:
