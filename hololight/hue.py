@@ -4,6 +4,7 @@ import numpy as np
 from phue import Bridge
 
 from .shallowfbcspdecoder import DecoderOutput
+from .stamped_websocket_server import StampedTextMessage
 
 from typing import (
     Optional,
@@ -20,13 +21,14 @@ class HueDemoState( ez.State ):
     lights_on: bool = False
     decode_class: Optional[ int ] = None
     bridge: Optional[ Bridge ] = None
+    hololens_state: Optional[ StampedTextMessage ] = None
 
 class HueDemo( ez.Unit ):
     SETTINGS: HueDemoSettings
     STATE: HueDemoState
 
     INPUT_DECODE = ez.InputStream( DecoderOutput )
-    INPUT_HOLOLENS = ez.InputStream( ByteString )
+    INPUT_HOLOLENS = ez.InputStream( StampedTextMessage )
 
     def initialize( self ) -> None:
         if self.SETTINGS.bridge_host:
@@ -44,13 +46,17 @@ class HueDemo( ez.Unit ):
                 if light.reachable:
                     light.on = on
 
-    # Create new subscriber for websocket input
     # Post most recently received message to state
+    @ez.subscriber( INPUT_HOLOLENS )
+    async def on_hololens_input( self, hololens_message: StampedTextMessage ) -> None:
+        print("hololens")
+        self.STATE.hololens_state = hololens_message
 
     # If timestamp on ws message in state is older than a half second, don't use it
     # If timestamp is recent enough, turn light on
     @ez.subscriber( INPUT_DECODE )
     async def on_decode( self, decode: DecoderOutput ) -> None:
+        print("decode")
         probs = np.exp( decode.output )
         cur_class = probs.argmax()
         cur_prob = probs[ cur_class ]
