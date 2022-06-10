@@ -21,7 +21,6 @@ class HueDemoSettings( ez.Settings ):
     bridge_host: Optional[ str ] = None
     num_lights: Optional[ int ] = None
 
-# Turn lights_on into a vector of bools
 class HueDemoState( ez.State ):
     lights_on: List[ bool ] = None
     decode_class: Optional[ int ] = None
@@ -81,25 +80,26 @@ class HueDemo( ez.Unit ):
     # If timestamp is recent enough, turn light on
     @ez.subscriber( INPUT_DECODE )
     async def on_decode( self, decode: DecoderOutput ) -> None:
-        probs = np.exp( decode.output )
-        cur_class = probs.argmax()
-        cur_prob = probs[ cur_class ]
+        if self.STATE.hololens_state:
+            probs = np.exp( decode.output )
+            cur_class = probs.argmax()
+            cur_prob = probs[ cur_class ]
 
-        print( cur_class, cur_prob )
+            print( cur_class, cur_prob )
 
-        if self.STATE.decode_class is None:
-            self.STATE.decode_class = cur_class
-
-        if cur_class != self.STATE.decode_class:
-            if cur_prob > self.SETTINGS.trigger_thresh:
+            if self.STATE.decode_class is None:
                 self.STATE.decode_class = cur_class
 
-                if cur_class == self.SETTINGS.trigger_class:
+            if cur_class != self.STATE.decode_class:
+                if cur_prob > self.SETTINGS.trigger_thresh:
+                    self.STATE.decode_class = cur_class
 
-                    ws_message = self.STATE.hololens_state
-                    ws_message_age = time.time() - ws_message._timestamp
-                    if ws_message_age < 0.5:
-                        self.flip_light(int(ws_message.text))
+                    if cur_class == self.SETTINGS.trigger_class:
+
+                        ws_message = self.STATE.hololens_state
+                        ws_message_age = time.time() - ws_message._timestamp
+                        if ws_message_age < 0.5:
+                            self.flip_light(int(ws_message.text))
 
     @ez.main
     def dummy( self ):

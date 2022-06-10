@@ -66,8 +66,6 @@ class HololightSystem( ez.System ):
             output=Path("websocket_messages.json")
         ))
 
-    # TODO: figure out where websocket input should go and add it to relevant module
-    #       for now we send to message logger :)
     def network( self ) -> ez.NetworkDefinition:
         return ( 
             ( self.SOURCE.OUTPUT_SIGNAL, self.PREPROC.INPUT_SIGNAL ),
