@@ -5,7 +5,6 @@ import logging
 
 from phue import Bridge, Light
 
-from dataclasses import field
 from pathlib import Path
 
 import ezmsg.core as ez
@@ -17,7 +16,7 @@ import websockets.exceptions
 
 from .shallowfbcspdecoder import DecoderOutput
 
-from typing import AsyncGenerator, Optional, Tuple, List
+from typing import AsyncGenerator, Optional, List
 
 logger = logging.getLogger( __name__ )
 
@@ -65,16 +64,15 @@ class Hololight( ez.Unit ):
                     light.on = not light.on
 
             try:
-
                 while True:
                     data = await websocket.recv()
 
                     cmd, value = data.split( ': ' )
 
                     if cmd == 'COMMAND':
-                        if value == 'START_MAPPING':
+
+                        if value == 'START_MAPPING': # Perform Spatial Light Mapping
                             logger.info( 'Starting Light Mapping Sequence...' )
-                            # Perform Spatial Light Mapping
                             lights: List[ Light ] = self.STATE.bridge.lights
                             for light in lights:
                                 if not light.reachable: continue
@@ -90,9 +88,10 @@ class Hololight( ez.Unit ):
                             logger.info( 'Light Mapping Sequence Complete' )
                             await websocket.send( 'RESULT: DONE_MAPPING' )
 
-                    elif cmd == 'SELECT':
+                    elif cmd == 'SELECT': # Select/Focus a light
                         self.STATE.focus_light = value if value != 'null' else None
                         logger.info( f'Client focusing light {self.STATE.focus_light}' )
+
                     else:
                         logger.info( 'Received problematic message from websocket client: {data}')
 
@@ -167,8 +166,6 @@ class Hololight( ez.Unit ):
 
 ### DEV/TEST APPARATUS
 
-from ezmsg.testing.debuglog import DebugLog
-
 class GenerateDecodeOutput( ez.Unit ):
 
     OUTPUT_DECODE = ez.OutputStream( DecoderOutput )
@@ -189,7 +186,6 @@ class HololightTestSystem( ez.System ):
 
     HOLOLIGHT = Hololight()
     DECODE_TEST = GenerateDecodeOutput()
-    # DEBUG = DebugLog()
 
     def configure( self ) -> None:
         return self.HOLOLIGHT.apply_settings( self.SETTINGS )

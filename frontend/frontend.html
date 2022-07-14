@@ -191,20 +191,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         return newFlower
       }
 
-      // let rayOrigin = vec3.create();
-      // let rayDirection = vec3.create();
       function onSelect(event) {
-        if (reticle.visible) {
+        if (reticle.visible && map_light) {
           // The reticle should already be positioned at the latest hit point, 
           // so we can just use it's matrix to save an unnecessary call to 
           // event.frame.getHitTestResults.
-          if(map_light) {
-            flower = addARObjectAt(reticle.matrix);
-            flower.light = map_light;
-            map_light = null;
+          flower = addARObjectAt(reticle.matrix);
+          flower.light = map_light;
+          map_light = null;
 
-            ws_global.send( `MAPPED: ${flower.light}` )
-          }
+          ws_global.send( `MAPPED: ${flower.light}` )
         }
       }
 
