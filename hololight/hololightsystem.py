@@ -10,6 +10,7 @@ from ezmsg.util.messagelogger import MessageLogger, MessageLoggerSettings
 from .modeltraining import ModelTraining, ModelTrainingSettings
 from .preprocessing import Preprocessing, PreprocessingSettings
 from .shallowfbcspdecoder import ShallowFBSCPDecoder, ShallowFBCSPDecoderSettings
+from .hololight import Frontend, FrontendSettings
 from .hue import HueDemo, HueDemoSettings
 from .stamped_websocket_server import StampedWebsocketServer
 
@@ -27,6 +28,8 @@ class HololightSystemSettings( ez.Settings ):
     openbcisource_settings: OpenBCISourceSettings
     decoder_settings: ShallowFBCSPDecoderSettings
     modeltraining_settings: ModelTrainingSettings
+    cert: Path
+
     huedemo_settings: HueDemoSettings = field(
         default_factory = HueDemoSettings
     )
@@ -42,14 +45,10 @@ class HololightSystem( ez.System ):
     PREPROC = Preprocessing()
     DECODER = ShallowFBSCPDecoder()
     TRAINING = ModelTraining()
+    FRONTEND = Frontend()
     HUE = HueDemo()
 
     DEBUG = DebugPrint()
-
-    WS_SERVER = StampedWebsocketServer()
-    WS_MESSAGES = MessageLogger() 
-
-    CERT = os.environ.get('LOCAL_CERT')
 
     def configure( self ) -> None:
         self.SOURCE.apply_settings( self.SETTINGS.openbcisource_settings )
@@ -57,14 +56,13 @@ class HololightSystem( ez.System ):
         self.DECODER.apply_settings( self.SETTINGS.decoder_settings )
         self.TRAINING.apply_settings( self.SETTINGS.modeltraining_settings )
         self.HUE.apply_settings( self.SETTINGS.huedemo_settings )
-        self.WS_SERVER.apply_settings( WebsocketSettings(
-            host="0.0.0.0",
-            port="8082",
-            cert_path=self.CERT
+
+        self.FRONTEND.apply_settings( FrontendSettings(
+            host = '0.0.0.0',
+            port = 443,
+            ws_port = 8082,
+            cert = self.SETTINGS.cert
         ) )
-        self.WS_MESSAGES.apply_settings( MessageLoggerSettings(
-            output=Path("websocket_messages.json")
-        ))
 
     def network( self ) -> ez.NetworkDefinition:
         return ( 
@@ -76,8 +74,6 @@ class HololightSystem( ez.System ):
             ( self.DECODER.OUTPUT_DECODE, self.HUE.INPUT_DECODE ),
             ( self.PREPROC.OUTPUT_SIGNAL, self.TRAINING.INPUT_SIGNAL ),
 
-            ( self.WS_SERVER.OUTPUT_MESSAGE, self.WS_MESSAGES.INPUT_MESSAGE ),
-            ( self.WS_SERVER.OUTPUT_MESSAGE, self.HUE.INPUT_HOLOLENS )
         )
 
     def process_components( self ) -> Tuple[ ez.Component, ... ]:
