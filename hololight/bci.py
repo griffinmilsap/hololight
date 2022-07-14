@@ -112,6 +112,13 @@ if __name__ == "__main__":
         default = None
     )
 
+    parser.add_argument(
+        '--cert',
+        type = lambda x: Path( x ),
+        help = "Certificate file for frontend server",
+        default = ( Path( '.' ) / 'cert.pem' ).absolute()
+    )
+
     args = parser.parse_args()
 
     gain_map: Dict[ int, GainState ] = {
@@ -137,6 +144,12 @@ if __name__ == "__main__":
         )
     )
 
+    # Check if cert exists (required)
+    cert: Path = args.cert
+
+    if not cert.exists():
+        raise ValueError( f"Certificate {cert} does not exist" )
+
     settings = HololightSystemSettings(
         openbcisource_settings = OpenBCISourceSettings(
             device = args.device,
@@ -151,6 +164,7 @@ if __name__ == "__main__":
         decoder_settings = ShallowFBCSPDecoderSettings(
             model_file = args.model
         ),
+        cert = cert,
         modeltraining_settings = ModelTrainingSettings(
             settings = ModelTrainingLogicSettings(
                 recording_dir = args.output 
@@ -161,7 +175,7 @@ if __name__ == "__main__":
             ),
             websocket_settings = WebsocketSettings(
                 host = "0.0.0.0",
-                port = 8082
+                port = 8083
             )
         ),
         huedemo_settings = HueDemoSettings(

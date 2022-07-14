@@ -143,4 +143,5 @@ cython_debug/
 # Project specific excludes
 train-data/
 recordings/
+cert.pem
 

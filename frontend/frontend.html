@@ -33,14 +33,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png">
 
-    <title>Hit Test</title>
+    <title>Hololight Demo</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>Hololens Demo</summary>
+        <summary>Hololight Demo</summary>
         <p>
-          Air tap to place markers where the Philips Hue lightbulbs are.
+          TODO: Populate me
         </p>
       </details>
     </header>
@@ -59,6 +59,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       let xrRefSpace = null;
       let xrViewerSpace = null;
       let xrHitTestSource = null;
+
       let ws_global;
 
       // WebGL scene globals.
@@ -88,21 +89,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       const MAX_FLOWERS = 30;
       let flowers = [];
 
+      let light_mapping = false;
+      let map_light = null;
+      let sel_flower = null;
+
       // Ensure the background is transparent for AR.
       scene.clear = false;
-
-      function connectToWebsocket() {
-        return new Promise(function(resolve, reject) {
-          const hostname = location.hostname
-          const ws = new WebSocket('wss://' + hostname + ':8082');
-          ws.onopen = function() {
-            resolve(ws);
-          };
-          ws.onerror = function(err) {
-            reject(err);
-          };
-        });
-      }
 
       function initXR() {
         xrButton = new WebXRButton({
@@ -162,6 +154,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
           session.requestAnimationFrame(onXRFrame);
         });
+
+        console.log( "Starting Light Mapping!" );
+        ws_global.send( 'COMMAND: START_MAPPING' );
+        light_mapping = true;
       }
 
       function onEndSession(session) {
@@ -191,16 +187,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           let oldFlower = flowers.shift();
           scene.removeNode(oldFlower);
         }
+
+        return newFlower
       }
 
-      let rayOrigin = vec3.create();
-      let rayDirection = vec3.create();
+      // let rayOrigin = vec3.create();
+      // let rayDirection = vec3.create();
       function onSelect(event) {
         if (reticle.visible) {
           // The reticle should already be positioned at the latest hit point, 
           // so we can just use it's matrix to save an unnecessary call to 
           // event.frame.getHitTestResults.
-          addARObjectAt(reticle.matrix);
+          if(map_light) {
+            flower = addARObjectAt(reticle.matrix);
+            flower.light = map_light;
+            map_light = null;
+
+            ws_global.send( `MAPPED: ${flower.light}` )
+          }
         }
       }
 
@@ -228,50 +232,68 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         scene.drawXRFrame(frame, pose);
 
-        const reticlex = reticle.matrix[12]
-        const reticley = reticle.matrix[13]
-        const reticlez = reticle.matrix[14]
-
-        // Get euclidean distance of current pose from all flowers
-        // If any flowers are within a certain distance of the pose
-        // Broadcast the index of the closest one via websocket
-        // Todo: clean up math!
-
-        let closestFlowerDistance;
-        let closestFlower;
+        // Determine closest flower to reticle
+        let closestFlowerDistance = null;
+        let closestFlower = null;
         flowers.forEach(function(flower, i) {
-          const flowerx = flower.matrix[12]
-          const flowery = flower.matrix[13]
-          const flowerz = flower.matrix[14]
 
-          const distance = Math.hypot(reticlex-flowerx, reticley-flowery, reticlez-flowerz)
-          if (distance <= 0.33) {
-            if (closestFlower !== undefined) {  // a flower has already been added
-              if (closestFlowerDistance > distance) {
-                closestFlower = i
-                closestFlowerDistance = distance
-              }
-            } else {
-              closestFlower = i
-              closestFlowerDistance = distance
+          let distance = Math.hypot(
+            reticle.matrix[12] - flower.matrix[12],
+            reticle.matrix[13] - flower.matrix[13],
+            reticle.matrix[14] - flower.matrix[14],
+          )
+
+          if (distance <= 0.33)
+            if (closestFlower == null || closestFlowerDistance > distance) { 
+              closestFlower = flower;
+              closestFlowerDistance = distance;
             }
-          }
         })
-        if (closestFlower !== undefined) {
-          ws_global.send(closestFlower.toString())
+
+        if (closestFlower != sel_flower) {
+          sel_flower = closestFlower;
+          if(!light_mapping)
+            ws_global.send(`SELECT: ${sel_flower == null ? "null" : closestFlower.light}`);
         }
 
         scene.endFrame();
       }
 
+      function connectToWebsocket() {
+        return new Promise(function(resolve, reject) {
+          const hostname = location.hostname
+          const ws = new WebSocket('wss://' + hostname + ':8082');
+          ws.onopen = () => resolve(ws);
+          ws.onerror = (err) => reject(err);
+        });
+      }
+
+      function on_message( event ) {
+        let tokens = event.data.split( ": " )
+        console.log( 'message from ezmsg', tokens )
+
+        if(tokens[0] == 'RESULT'){
+          if(tokens[1] == 'DONE_MAPPING'){
+            light_mapping = false;
+            console.log( 'Done with light mapping' )
+          }
+        }
+        else if(tokens[0] == 'LOCATE'){
+          map_light = tokens[1];
+          console.log( `Locating ${map_light}` )
+        }
+      }
+
       // Start the XR application.
       connectToWebsocket().then(function(ws) {
         ws_global = ws;
-        ws_global.send("hello ezmsg!")
+        ws_global.addEventListener( 'message', on_message )
         initXR();
       }).catch(function(err) {
+        console.log( err )
         console.log("Websocket connection failed")
       })
+
     </script>
   </body>
 </html>
