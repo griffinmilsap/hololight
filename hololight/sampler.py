@@ -94,7 +94,8 @@ class Sampler( ez.Unit ):
             stop = self.STATE.trigger_offset + stop_offset
 
             if stop < 0:
-                try:
+                if abs( start ) < self.STATE.buffer.shape[0]:
+
                     # We should be able to dispatch a sample
                     sample_data = self.STATE.buffer[ start : stop, ... ]
                     sample_data = np.swapaxes( sample_data, msg.time_dim, 0 )
@@ -104,11 +105,11 @@ class Sampler( ez.Unit ):
                         sample = replace( msg, data = sample_data ),
                         time_offset = self.SETTINGS.sample_per[0]
                     )
-                except IndexError:
-                    logger.warn( 'Discarding sample; insufficient buffer size' )
-                finally:
-                    self.STATE.trigger_info = None
-                    self.STATE.trigger_offset = None
+                    
+                else: logger.warn( 'Discarding sample; insufficient buffer size' )
+
+                self.STATE.trigger_info = None
+                self.STATE.trigger_offset = None
 
         # We only want to prune buffer if we aren't sampling
         elif self.STATE.buffer.shape[ 0 ] > max_buf_len:
