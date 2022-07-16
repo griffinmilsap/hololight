@@ -39,11 +39,12 @@ class Sampler( ez.Unit ):
 
     def initialize( self ) -> None:
         if self.SETTINGS.sample_per[1] <= self.SETTINGS.sample_per[0]:
-            raise ValueError( 'Invalid sample period; sample_per[1] <= sample_per[0]' )
+            raise ValueError( f'Invalid sample period: {self.SETTINGS.sample_per[1]=} <= {self.SETTINGS.sample_per[0]=}' )
 
     @ez.subscriber( INPUT_TRIGGER )
     async def on_trigger( self, msg: Any ) -> None:
-        """ Start sampling if we aren't already """
+        # TODO: It is probably possible to adapt this code to 
+        # allow multiple overlapping sample acquisitions
         if self.STATE.trigger_info is None:
             if self.STATE.last_msg is not None:
                 # Do what we can with the wall clock to determine sample alignment
@@ -51,6 +52,8 @@ class Sampler( ez.Unit ):
                 wall_delta = self.STATE.trigger_info._timestamp
                 wall_delta -= self.STATE.last_msg._timestamp
                 self.STATE.trigger_offset = int( wall_delta * self.STATE.last_msg.fs )
+            else: logger.warn( 'Sampling failed: no signal to sample yet' )
+        else: logger.warn( 'Sampling failed: already sampling' )
 
     @ez.subscriber( INPUT_SIGNAL )
     @ez.publisher( OUTPUT_SAMPLE )
@@ -71,7 +74,8 @@ class Sampler( ez.Unit ):
         ):
             # Data stream changed meaningfully -- flush buffer, stop sampling
             if self.STATE.trigger_info is not None:
-                logger.warn( 'Discarding sample; signal properties changed' )
+                logger.warn( 'Sampling failed: signal properties changed' )
+
             self.STATE.buffer = None
             self.STATE.trigger_info = None
             self.STATE.trigger_offset = None
@@ -103,10 +107,10 @@ class Sampler( ez.Unit ):
                     yield self.OUTPUT_SAMPLE, SampleMessage( 
                         trigger_info = self.STATE.trigger_info,
                         sample = replace( msg, data = sample_data ),
-                        time_offset = self.SETTINGS.sample_per[0]
+                        time_offset = start_offset / msg.fs
                     )
-                    
-                else: logger.warn( 'Discarding sample; insufficient buffer size' )
+
+                else: logger.warn( 'Sampling failed: insufficient buffer size' )
 
                 self.STATE.trigger_info = None
                 self.STATE.trigger_offset = None
@@ -192,7 +196,7 @@ class SamplerTestSystem( ez.System ):
 
 if __name__ == '__main__':
 
-    settings = SamplerSettings( sample_per = ( -1.0, 1.0 ) )
+    settings = SamplerSettings( sample_per = ( -10.0, 10.0 ) )
     system = SamplerTestSystem( settings )
 
     ez.run_system( system )
