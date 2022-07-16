@@ -22,7 +22,7 @@ from .modeltraining import (
 )
 from .shallowfbcspdecoder import ShallowFBCSPDecoderSettings
 from .hololightsystem import HololightSystem, HololightSystemSettings
-from .hololight import HololightSettings
+from .frontend.demo import HololightDemoSettings
 
 from typing import (
     Dict,
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     classes: int = args.classes
     model: Optional[ Path ] = args.model
     output: Path = args.output
-    
+
     bridge: Optional[ str ] = args.bridge
     cert: Path = args.cert
 
@@ -190,7 +190,7 @@ if __name__ == "__main__":
             )
         ),
 
-        demo_settings = HololightSettings(
+        demo_settings = HololightDemoSettings(
             cert = cert,
             bridge_host = bridge
         )

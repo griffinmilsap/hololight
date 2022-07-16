@@ -7,7 +7,7 @@ from ezmsg.eeg.openbci import OpenBCISource, OpenBCISourceSettings
 from .modeltraining import ModelTraining, ModelTrainingSettings
 from .preprocessing import Preprocessing, PreprocessingSettings
 from .shallowfbcspdecoder import ShallowFBSCPDecoder, ShallowFBCSPDecoderSettings
-from .hololight import Hololight, HololightSettings
+from .frontend.demo import HololightDemo, HololightDemoSettings
 
 from typing import Any, Tuple
 
@@ -15,7 +15,7 @@ class HololightSystemSettings( ez.Settings ):
     openbcisource_settings: OpenBCISourceSettings
     decoder_settings: ShallowFBCSPDecoderSettings
     modeltraining_settings: ModelTrainingSettings
-    demo_settings: HololightSettings
+    demo_settings: HololightDemoSettings
 
     preprocessing_settings: PreprocessingSettings = field(
         default_factory = PreprocessingSettings
@@ -29,7 +29,7 @@ class HololightSystem( ez.System ):
     PREPROC = Preprocessing()
     DECODER = ShallowFBSCPDecoder()
     # TRAINING = ModelTraining()
-    HOLOLIGHT = Hololight()
+    HOLOLIGHT = HololightDemo()
 
     DEBUG = DebugLog()
 

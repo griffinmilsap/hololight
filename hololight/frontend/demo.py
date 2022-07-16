@@ -14,14 +14,14 @@ import websockets
 import websockets.server
 import websockets.exceptions
 
-from .shallowfbcspdecoder import DecoderOutput
+from ..shallowfbcspdecoder import DecoderOutput
 
 from typing import AsyncGenerator, Optional, List
 
 logger = logging.getLogger( __name__ )
 
 
-class HololightSettings( ez.Settings ):
+class HololightDemoSettings( ez.Settings ):
     cert: Path
     bridge_host: str
     host: str = '0.0.0.0'
@@ -31,16 +31,16 @@ class HololightSettings( ez.Settings ):
     trigger_thresh: float = 0.9
 
 
-class HololightState( ez.State ):
+class HololightDemoState( ez.State ):
     focus_light: Optional[ str ] = None
     decode_class: Optional[ int ] = None
     bridge: Optional[ Bridge ] = None
 
 
-class Hololight( ez.Unit ):
+class HololightDemo( ez.Unit ):
 
-    SETTINGS: HololightSettings
-    STATE: HololightState
+    SETTINGS: HololightDemoSettings
+    STATE: HololightDemoState
 
     INPUT_DECODE = ez.InputStream( DecoderOutput )
 
@@ -149,10 +149,15 @@ class Hololight( ez.Unit ):
 
     @ez.main
     def serve( self ):
-        httpd = http.server.HTTPServer(
-            ( self.SETTINGS.host, self.SETTINGS.port ), 
-            http.server.SimpleHTTPRequestHandler,
-        )
+
+        directory = str( ( Path( __file__ ).parent / 'web' ) )
+
+        class Handler( http.server.SimpleHTTPRequestHandler ):
+            def __init__( self, *args, **kwargs ):
+                super().__init__( *args, directory = directory, **kwargs )
+
+        address = ( self.SETTINGS.host, self.SETTINGS.port )
+        httpd = http.server.HTTPServer( address, Handler )
 
         httpd.socket = ssl.wrap_socket(
             httpd.socket,
@@ -182,9 +187,9 @@ class GenerateDecodeOutput( ez.Unit ):
 
 class HololightTestSystem( ez.System ):
 
-    SETTINGS: HololightSettings
+    SETTINGS: HololightDemoSettings
 
-    HOLOLIGHT = Hololight()
+    HOLOLIGHT = HololightDemo()
     DECODE_TEST = GenerateDecodeOutput()
 
     def configure( self ) -> None:
@@ -221,7 +226,7 @@ if __name__ == '__main__':
     bridge_host: str = args.bridge
     cert: Path = args.cert
 
-    settings = HololightSettings(
+    settings = HololightDemoSettings(
         cert = cert,
         bridge_host = bridge_host
     )
