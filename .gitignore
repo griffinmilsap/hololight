@@ -145,3 +145,5 @@ train-data/
 recordings/
 cert.pem
 
+# Stupid stuff
+.DS_Store
