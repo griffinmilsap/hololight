@@ -8,8 +8,8 @@ $ source env/bin/activate
 (env) $ pip install --upgrade pip
 (env) $ pip install -e ../path/to/ezmsg
 (env) $ pip install -e ../path/to/ezmsg/extensions/ezmsg-sigproc
-(env) $ pip install -e ../path/to/ezmsg/extensions/ezmsg-eeg
 (env) $ pip install -e ../path/to/ezmsg/extensions/ezmsg-websocket
+(env) $ pip install -e ../path/to/ezmsg/extensions/ezmsg-eeg
 (env) $ pip install -e .
 ```
 
