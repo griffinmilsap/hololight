@@ -12,7 +12,7 @@ from typing import Optional, Any, Tuple, List
 logger = logging.getLogger( __name__ )
 
 class SampleTriggerMessage( StampedMessage ):
-    period: Tuple[ float, float ]
+    period: Optional[ Tuple[ float, float ] ] = None
     value: Any = None
 
 @dataclass
@@ -26,6 +26,7 @@ class SampleMessage( StampedMessage ):
 
 class SamplerSettings( ez.Settings ):
     buffer_dur: float
+    period: Optional[ Tuple[ float, float ] ] = None
 
 class SamplerState( ez.State ):
     triggers: List[ TriggerInfo ] = field( default_factory = list )
@@ -45,18 +46,24 @@ class Sampler( ez.Unit ):
         if self.STATE.last_msg is not None:
             fs = self.STATE.last_msg.fs
 
+            period = msg.period if msg.period is not None else self.SETTINGS.period
+
+            if period is None:
+                logger.warn( f'Sampling failed: period not specified' )
+                return
+
             # Check that period is valid
-            start_offset = int( msg.period[0] * fs )
-            stop_offset = int( msg.period[1] * fs )
+            start_offset = int( period[0] * fs )
+            stop_offset = int( period[1] * fs )
             if ( stop_offset - start_offset ) <= 0:
                 logger.warn( f'Sampling failed: invalid period requested' )
                 return
 
             # Check that period is compatible with buffer duration
             max_buf_len = int( self.SETTINGS.buffer_dur * fs )
-            req_buf_len = int( ( msg.period[1] - msg.period[0] ) * fs )
+            req_buf_len = int( ( period[1] - period[0] ) * fs )
             if req_buf_len >= max_buf_len:
-                logger.warn( f'Sampling failed: {msg.period=} >= {self.SETTINGS.buffer_dur=}' )
+                logger.warn( f'Sampling failed: {period=} >= {self.SETTINGS.buffer_dur=}' )
                 return
 
             # Do what we can with the wall clock to determine sample alignment
@@ -68,7 +75,12 @@ class Sampler( ez.Unit ):
                 logger.warn( 'Sampling failed: insufficient buffer accumulation for requested sample period' )
                 return
 
-            self.STATE.triggers.append( TriggerInfo( msg = msg, offset = offset ) )
+            self.STATE.triggers.append( 
+                TriggerInfo( 
+                    msg = replace( msg, period = period ), 
+                    offset = offset 
+                ) 
+            )
 
         else: logger.warn( 'Sampling failed: no signal to sample yet' )
 
