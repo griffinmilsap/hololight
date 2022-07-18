@@ -2,19 +2,17 @@ import asyncio
 import http.server
 import ssl
 import logging
-
-from phue import Bridge, Light
+import json
 
 from pathlib import Path
+from dataclasses import field
 
 import ezmsg.core as ez
-import numpy as np
 
 import websockets
 import websockets.server
 import websockets.exceptions
 
-from ..shallowfbcspdecoder import DecoderOutput
 from ..sampler import SampleTriggerMessage
 
 from typing import AsyncGenerator, Optional, List
@@ -23,15 +21,28 @@ logger = logging.getLogger( __name__ )
 
 class TrainingServerSettings( ez.Settings ):
     cert: Path
+    key: Optional[ Path ] = None
+    ca_cert: Optional[ Path ] = None
     host: str = '0.0.0.0'
     port: int = 8080
     ws_port: int = 5545
+    trigger_sender: Optional[ str ] = "Fixation"
+
+class TrainingServerState( ez.State ):
+    trigger_queue: "asyncio.Queue[ SampleTriggerMessage ]" = field( default_factory = asyncio.Queue )
 
 class TrainingServer( ez.Unit ):
 
     SETTINGS: TrainingServerSettings
+    STATE: TrainingServerState
 
     OUTPUT_SAMPLETRIGGER = ez.InputStream( SampleTriggerMessage )
+
+    @ez.publisher( OUTPUT_SAMPLETRIGGER ) 
+    async def publish_trigger( self ) -> AsyncGenerator:
+        while True:
+            output = await self.STATE.trigger_queue.get()
+            yield self.OUTPUT_SAMPLETRIGGER, output
 
     @ez.task
     async def start_websocket_server( self ) -> None:
@@ -41,8 +52,15 @@ class TrainingServer( ez.Unit ):
 
             try:
                 while True:
-                    data = await websocket.recv()
-                    logger.info( data )
+                    data = json.loads( await websocket.recv() )
+
+                    if self.SETTINGS.trigger_sender is not None:
+                        if data[ 'sender' ] == self.SETTINGS.trigger_sender:
+                            self.STATE.trigger_queue.put_nowait(
+                                SampleTriggerMessage(
+                                    value = data
+                                )
+                            )
 
             except websockets.exceptions.ConnectionClosedOK:
                 logger.info( 'Websocket Client Closed Connection' )
@@ -55,9 +73,13 @@ class TrainingServer( ez.Unit ):
 
         try:
             ssl_context = ssl.SSLContext( ssl.PROTOCOL_TLS_SERVER ) 
+
+            if self.SETTINGS.ca_cert:
+                ssl_context.load_verify_locations( self.SETTINGS.ca_cert )
+
             ssl_context.load_cert_chain( 
                 certfile = self.SETTINGS.cert, 
-                keyfile = self.SETTINGS.cert 
+                keyfile = self.SETTINGS.key 
             )
 
             server = await websockets.server.serve(
@@ -88,6 +110,8 @@ class TrainingServer( ez.Unit ):
             httpd.socket,
             server_side = True,
             certfile = self.SETTINGS.cert,
+            keyfile = self.SETTINGS.key,
+            ca_certs = self.SETTINGS.ca_cert,
             ssl_version = ssl.PROTOCOL_TLS_SERVER
         )
 
@@ -128,12 +152,30 @@ if __name__ == '__main__':
         default = ( Path( '.' ) / 'cert.pem' ).absolute()
     )
 
+    parser.add_argument(
+        '--key',
+        type = lambda x: Path( x ),
+        help = "Private key for frontend server [Optional -- assumed to be included in --cert file if omitted)",
+        default = None
+    )
+
+    parser.add_argument(
+        '--cacert',
+        type = lambda x: Path( x ),
+        help = "Certificate file for frontend server",
+        default = None
+    )
+
     args = parser.parse_args()
 
     cert: Path = args.cert
+    key: Optional[ Path ] = args.key
+    cacert: Optional[ Path ] = args.cacert
 
     settings = TrainingServerSettings(
         cert = cert,
+        key = key,
+        ca_cert = cacert
     )
 
     system = TrainingServerTestSystem( settings )
