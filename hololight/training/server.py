@@ -26,7 +26,8 @@ class TrainingServerSettings( ez.Settings ):
     host: str = '0.0.0.0'
     port: int = 8080
     ws_port: int = 5545
-    trigger_sender: Optional[ str ] = "Fixation"
+    trigger_sender: Optional[ str ] = None # If specified we only trigger when sender == this string
+    assign_trigger_value: bool = False # If true, we assign the commit to the value of the trigger
 
 class TrainingServerState( ez.State ):
     trigger_queue: "asyncio.Queue[ SampleTriggerMessage ]" = field( default_factory = asyncio.Queue )
@@ -54,13 +55,15 @@ class TrainingServer( ez.Unit ):
                 while True:
                     data = json.loads( await websocket.recv() )
 
-                    if self.SETTINGS.trigger_sender is not None:
-                        if data[ 'sender' ] == self.SETTINGS.trigger_sender:
-                            self.STATE.trigger_queue.put_nowait(
-                                SampleTriggerMessage(
-                                    value = data
-                                )
+                    if self.SETTINGS.trigger_sender is None or ( 
+                        self.SETTINGS.trigger_sender is not None and \
+                        data[ 'sender' ] == self.SETTINGS.trigger_sender 
+                    ):             
+                        self.STATE.trigger_queue.put_nowait(
+                            SampleTriggerMessage(
+                                value = data if self.SETTINGS.assign_trigger_value else None
                             )
+                        )
 
             except websockets.exceptions.ConnectionClosedOK:
                 logger.info( 'Websocket Client Closed Connection' )
@@ -162,7 +165,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--cacert',
         type = lambda x: Path( x ),
-        help = "Certificate file for frontend server",
+        help = "Certificate for custom authority [Optional]",
         default = None
     )
 
@@ -175,7 +178,8 @@ if __name__ == '__main__':
     settings = TrainingServerSettings(
         cert = cert,
         key = key,
-        ca_cert = cacert
+        ca_cert = cacert,
+        trigger_sender = 'Fixation'
     )
 
     system = TrainingServerTestSystem( settings )

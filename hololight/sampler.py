@@ -26,7 +26,11 @@ class SampleMessage( StampedMessage ):
 
 class SamplerSettings( ez.Settings ):
     buffer_dur: float
-    period: Optional[ Tuple[ float, float ] ] = None
+    period: Optional[ Tuple[ float, float ] ] = None # Optional default period if unspecified in SampleTriggerMessage
+    value: Any = None # Optional default value if unspecified in SampleTriggerMessage
+
+    # If true, we use time.time() and sampling rate to estimate sample-precise alignment
+    estimate_alignment: bool = False 
 
 class SamplerState( ez.State ):
     triggers: List[ TriggerInfo ] = field( default_factory = list )
@@ -47,6 +51,7 @@ class Sampler( ez.Unit ):
             fs = self.STATE.last_msg.fs
 
             period = msg.period if msg.period is not None else self.SETTINGS.period
+            value = msg.value if msg.value is not None else self.SETTINGS.value
 
             if period is None:
                 logger.warn( f'Sampling failed: period not specified' )
@@ -66,9 +71,11 @@ class Sampler( ez.Unit ):
                 logger.warn( f'Sampling failed: {period=} >= {self.SETTINGS.buffer_dur=}' )
                 return
 
-            # Do what we can with the wall clock to determine sample alignment
-            wall_delta = msg._timestamp - self.STATE.last_msg._timestamp
-            offset = int( wall_delta * fs )
+            offset: int = 0
+            if self.SETTINGS.estimate_alignment:
+                # Do what we can with the wall clock to determine sample alignment
+                wall_delta = msg._timestamp - self.STATE.last_msg._timestamp
+                offset = int( wall_delta * fs )
 
             # Check that current buffer accumulation allows for offset - period start
             if -min( offset + start_offset, 0 ) >= self.STATE.buffer.shape[0]:
@@ -77,7 +84,7 @@ class Sampler( ez.Unit ):
 
             self.STATE.triggers.append( 
                 TriggerInfo( 
-                    msg = replace( msg, period = period ), 
+                    msg = replace( msg, period = period, value = value ), 
                     offset = offset 
                 ) 
             )

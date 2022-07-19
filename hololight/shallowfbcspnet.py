@@ -1,18 +1,14 @@
 # Note: This whole model/code was torn out of braindecode
 # https://braindecode.org/
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import torch as th
 import numpy as np
 from torch import nn
 from torch.nn import init
 
-from typing import (
-    Optional,
-    Callable,
-    Union
-)
+from typing import Optional, Union, Callable
 
 def square( x: th.Tensor ) -> th.Tensor:
     return x * x
@@ -31,6 +27,8 @@ class Expression( th.nn.Module ):
         `torch.autograd.Variable` to compute its output.
     """
 
+    expression_fn: Callable
+
     def __init__( self, expression_fn ):
         super( Expression, self ).__init__()
         self.expression_fn = expression_fn
@@ -43,7 +41,7 @@ class Expression( th.nn.Module ):
             self.expression_fn, "kwargs"
         ):
             expression_str = "{:s} {:s}".format(
-                self.expression_fn.func.__name__, str( self.expression_fn.kwargs )
+                self.expression_fn.func.__name__, str( self.expression_fn.kwargs ) # noqa
             )
         elif hasattr( self.expression_fn, "__name__" ):
             expression_str = self.expression_fn.__name__
@@ -52,19 +50,19 @@ class Expression( th.nn.Module ):
         return f'{ self.__class__.__name__ }(expression={ str( expression_str ) })'
     
 class Ensure4d( nn.Module ):
-    def forward( self, x ):
+    def forward( self, x: th.Tensor ):
         while( len( x.shape ) < 4 ):
             x = x.unsqueeze( -1 )
         return x
 
 # remove empty dim at end and potentially remove empty time dim
 # do not just use squeeze as we never want to remove first dim
-def _squeeze_final_output( x: th.Tensor ) -> th.Tensor:
-    assert x.size()[ 3 ] == 1
-    x = x[ :, :, :, 0 ]
-    if x.size()[ 2 ] == 1:
-        x = x[ :, :, 0 ]
-    return x
+# def _squeeze_final_output( x: th.Tensor ) -> th.Tensor:
+#     assert x.size()[ 3 ] == 1
+#     x = x[ :, :, :, 0 ]
+#     if x.size()[ 2 ] == 1:
+#         x = x[ :, :, 0 ]
+#     return x
 
 def _transpose_time_to_spat( x: th.Tensor ) -> th.Tensor:
     return x.permute( 0, 3, 2, 1 )
@@ -90,16 +88,16 @@ class ShallowFBCSPNet:
 
     in_chans: int
     n_classes: int
-    input_time_length: Optional[ int ] = None
+    input_time_length: Optional[ int ] = None # must not be None if final_conv_length is 'auto'
     n_filters_time: int = 40
     filter_time_length: int = 25
     n_filters_spat: int = 40
     pool_time_length: int = 75
     pool_time_stride: int = 15
     final_conv_length: Union[ str, int ] = 30 # Could also be 'auto'
-    conv_nonlin: Callable = field( default_factory = lambda: square )
-    pool_mode: str = 'mean'
-    pool_nonlin: Callable = field( default_factory = lambda: safe_log )
+    conv_nonlin: Optional[ str ] = 'square' # || safe_log; No nonlin if None
+    pool_mode: str = 'mean' # || 'max'
+    pool_nonlin: Optional[ str ] = 'safe_log' # || square; No nonlin if None
     split_first_layer: bool = True
     batch_norm: bool = True
     batch_norm_alpha: float = 0.1
@@ -110,7 +108,16 @@ class ShallowFBCSPNet:
         if self.final_conv_length == "auto":
             assert self.input_time_length is not None
 
-        pool_class = dict( max = nn.MaxPool2d, mean = nn.AvgPool2d )[ self.pool_mode ]
+        pool_class = dict( 
+            max = nn.MaxPool2d, 
+            mean = nn.AvgPool2d 
+        )[ self.pool_mode ]
+
+        nonlin_dict = dict( 
+            square = square,
+            safe_log = safe_log 
+        )
+
         model = nn.Sequential()
         
         model.add_module( "ensuredims", Ensure4d() )
@@ -157,7 +164,10 @@ class ShallowFBCSPNet:
                 ),
             )
 
-        model.add_module( "conv_nonlin", Expression( self.conv_nonlin ) )
+        if self.conv_nonlin:
+            model.add_module( "conv_nonlin", Expression( 
+                nonlin_dict[ self.conv_nonlin ] 
+            ) )
 
         model.add_module( "pool",
             pool_class(
@@ -166,7 +176,11 @@ class ShallowFBCSPNet:
             ),
         )
 
-        model.add_module( "pool_nonlin", Expression( self.pool_nonlin ) )
+        if self.pool_nonlin:
+            model.add_module( "pool_nonlin", Expression( 
+                nonlin_dict[ self.pool_nonlin ] 
+            ) )
+
         model.add_module( "drop", nn.Dropout( p = self.drop_prob ) )
         model.eval()
 
@@ -180,7 +194,6 @@ class ShallowFBCSPNet:
                     dtype = th.float32
                 )
             )
-            # n_out_time = out.cpu().data.numpy().shape[2]
             n_out_time = np.array( out.tolist() ).shape[2]
             self.final_conv_length = n_out_time
 
@@ -194,22 +207,30 @@ class ShallowFBCSPNet:
         )
 
         model.add_module( "softmax", nn.LogSoftmax( dim = 1 ) )
-        model.add_module( "squeeze", Expression( _squeeze_final_output ) )
+        # model.add_module( "squeeze", Expression( _squeeze_final_output ) )
 
         # Initialization, xavier is same as in paper...
-        init.xavier_uniform_( model.conv_time.weight, gain = 1 )
+        # init.xavier_uniform_( model.conv_time.weight, gain = 1 )
+        init.xavier_uniform_( model.get_submodule( 'conv_time' ), gain = 1 )
 
         # maybe no bias in case of no split layer and batch norm
         if self.split_first_layer or ( not self.batch_norm ):
-            init.constant_( model.conv_time.bias, 0 )
+            # init.constant_( model.conv_time.bias, 0 )
+            init.constant_( model.get_submodule( 'conv_time.bias' ), 0 )
         if self.split_first_layer:
-            init.xavier_uniform_( model.conv_spat.weight, gain = 1 )
+            # init.xavier_uniform_( model.conv_spat.weight, gain = 1 )
+            init.xavier_uniform_( model.get_submodule( 'conv_spat.weight' ), gain = 1 )
             if not self.batch_norm:
-                init.constant_( model.conv_spat.bias, 0 )
+                # init.constant_( model.conv_spat.bias, 0 )
+                init.constant_( model.get_submodule( 'conv_spat.bias' ), 0 )
         if self.batch_norm:
-            init.constant_( model.bnorm.weight, 1 )
-            init.constant_( model.bnorm.bias, 0 )
-        init.xavier_uniform_( model.conv_classifier.weight, gain = 1 )
-        init.constant_( model.conv_classifier.bias, 0 )
+            # init.constant_( model.bnorm.weight, 1 )
+            init.constant_( model.get_submodule( 'bnorm.weight' ), 1 )
+            # init.constant_( model.bnorm.bias, 0 )
+            init.constant_( model.get_submodule( 'bnorm.bias' ), 0 )
+        #init.xavier_uniform_( model.conv_classifier.weight, gain = 1 )
+        init.xavier_uniform_( model.get_submodule( 'conv_classifier.weight' ), gain = 1 )
+        # init.constant_( model.conv_classifier.bias, 0 )
+        init.constant_( model.get_submodule( 'conv_classifier.bias' ), 0 )
 
         return model
