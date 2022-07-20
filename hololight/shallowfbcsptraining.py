@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import field
+from distutils.log import Log
 
 import ezmsg.core as ez
 import numpy as np
@@ -173,3 +174,20 @@ if __name__ == '__main__':
     system = ShallowFBCSPTrainingTestSystem( settings )
 
     ez.run_system( system )
+
+
+# Change TimeseriesMessage to TSMessage
+# Change EEGMessage to MultiChTSMessage
+# Alias EEGMessage
+# Adapt ShallowFBCSPNet to accept a n_crops parameter INSTEAD of a final_conv_length parameter
+# Split ShallowFBCSPNet dataclass into two sets of parameters:
+    # one for model specifications
+    # one for IO parameters (num channels, num crops, input time len, etc)
+# Figure out how to elevate HTTPS Connection to websocket on same port
+# Dashboard with Panel for timeseries visualization
+# Adapt websocket API to send 
+    # LOG
+    # LOGJSON
+    # TRIGGER
+        # (Incl Per and value)
+# Send two triggers from individual labjs slides
