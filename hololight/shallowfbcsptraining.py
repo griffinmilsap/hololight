@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import field
-from distutils.log import Log
+import logging
 
 import ezmsg.core as ez
 import numpy as np
@@ -10,6 +10,8 @@ from .shallowfbcspnet import ShallowFBCSPNet
 from .sampler import SampleMessage
 
 from typing import AsyncGenerator, List, Optional, Union, Tuple
+
+logger = logging.getLogger( __name__ )
 
 class ShallowFBCSPTrainingSettings( ez.Settings ):
     model_spec: ShallowFBCSPNet
@@ -33,6 +35,7 @@ class ShallowFBCSPTraining( ez.Unit ):
 from ezmsg.testing.debuglog import DebugLog
 from ezmsg.eeg.eegmessage import EEGMessage
 from ezmsg.sigproc.butterworthfilter import ButterworthFilter, ButterworthFilterSettings
+from ezmsg.sigproc.window import Window, WindowSettings
 
 class EEGSynthSettings( ez.Settings ):
     fs: float = 500.0 # Hz
@@ -87,7 +90,8 @@ class WhiteEEG( ez.Unit ):
 
             if self.SETTINGS.dispatch_rate:
                 if self.SETTINGS.dispatch_rate == 'realtime':
-                    await asyncio.sleep( self.SETTINGS.blocksize / self.SETTINGS.fs )
+                    sleep_sec = self.SETTINGS.blocksize / self.SETTINGS.fs
+                    await asyncio.sleep( sleep_sec )
                 else:
                     await asyncio.sleep( self.SETTINGS.dispatch_rate )
 
@@ -116,6 +120,87 @@ class EEGSynth( ez.Collection ):
             ( self.FILTER.OUTPUT_SIGNAL, self.OUTPUT_SIGNAL )
         )
 
+from dataclasses import dataclass
+import matplotlib
+matplotlib.use( "agg" )
+
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
+
+import panel
+import param
+
+class EEGPlot( param.Parameterized ):
+    gain = param.Number( default = 1.0, bounds = ( 0, 1e6 ) )
+    eeg = param.Array( default = None )
+
+    fig: Figure
+    ax: Axes
+
+    def __init__( self, **params ):
+        super().__init__( **params )
+        self.fig, self.ax = plt.subplots( dpi = 100 )
+
+    @param.depends( 'eeg', watch = True )
+    def view( self ) -> Figure:
+
+        if self.eeg is not None:
+            self.ax.clear()
+            arr = self.eeg * self.gain
+            self.ax.plot( arr [ :, 0 ] )
+
+        return self.fig
+
+class EEGPlotterSettings( ez.Settings ):
+    ...
+
+class EEGPlotterState( ez.State ):
+    plot: EEGPlot = field( default_factory = EEGPlot )
+
+class EEGPlotter( ez.Unit ):
+
+    SETTINGS: EEGPlotterSettings
+    STATE: EEGPlotterState
+
+    INPUT_SIGNAL = ez.InputStream( EEGMessage )
+
+    @ez.subscriber( INPUT_SIGNAL )
+    async def on_signal( self, msg: EEGMessage ) -> None:
+        logger.info( 'Updating data' )
+        self.STATE.plot.eeg = msg.data
+
+    @ez.main
+    def serve_dashboard( self ) -> None:
+
+        fig, ax = plt.subplots( dpi = 100 )
+
+        # def plot_eeg( gain: float, eeg: Optional[ np.ndarray ] ) -> Figure:
+
+        #     print( f'Replotting {eeg=}' )
+
+        #     if eeg is not None:
+        #         ax.clear()
+        #         arr = eeg * gain
+        #         ax.plot( arr [ :, 0 ] )
+
+        #     return fig
+
+        # gain = panel.widgets.FloatSlider( name = 'Gain', value = 1.0, start = 0.0, end = 1e6, step = 1e4 )
+        # reactive_plot = panel.bind( plot_eeg, gain, self.STATE.eeg_data, watch = True )
+        # widgets = panel.Column( "<br>\n# Plot", gain )
+        # app = panel.Row( reactive_plot, widgets )
+        # thread = panel.serve( app, port = 8082 )
+
+        app = panel.Row( 
+            self.STATE.plot.param,
+            self.STATE.plot.view
+        )
+
+        panel.serve( app, port = 8082 )
+        
+
+
 class ShallowFBCSPTrainingTestSystemSettings( ez.Settings ):
     shallowfbcsptraining_settings: ShallowFBCSPTrainingSettings
     eeg_settings: EEGSynthSettings = field( 
@@ -127,6 +212,8 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
     SETTINGS: ShallowFBCSPTrainingTestSystemSettings
 
     EEG = EEGSynth()
+    WINDOW = Window()
+    PLOTTER = EEGPlotter()
     FBCSP_TRAINING = ShallowFBCSPTraining()
     DEBUG = DebugLog()
 
@@ -135,13 +222,26 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
             self.SETTINGS.shallowfbcsptraining_settings 
         )
 
+        self.EEG.apply_settings(
+            self.SETTINGS.eeg_settings
+        )
+
+        self.WINDOW.apply_settings(
+            WindowSettings( 
+                window_dur = 2.0, 
+                window_shift = 0.5 
+            )
+        )
+
     def network( self ) -> ez.NetworkDefinition:
         return ( 
-            ( self.EEG.OUTPUT_SIGNAL, self.DEBUG.INPUT ), 
+            ( self.EEG.OUTPUT_SIGNAL, self.WINDOW.INPUT_SIGNAL ),
+            # ( self.WINDOW.OUTPUT_SIGNAL, self.DEBUG.INPUT ),
+            ( self.WINDOW.OUTPUT_SIGNAL, self.PLOTTER.INPUT_SIGNAL ),
         )
 
     def process_components( self ) -> Tuple[ ez.Component, ... ]:
-        return ( self.FBCSP_TRAINING, )
+        return ( self.FBCSP_TRAINING, self.PLOTTER, )
 
 if __name__ == '__main__':
 
@@ -183,7 +283,6 @@ if __name__ == '__main__':
 # Split ShallowFBCSPNet dataclass into two sets of parameters:
     # one for model specifications
     # one for IO parameters (num channels, num crops, input time len, etc)
-# Figure out how to elevate HTTPS Connection to websocket on same port
 # Dashboard with Panel for timeseries visualization
 # Adapt websocket API to send 
     # LOG
