@@ -78,7 +78,7 @@ class WhiteEEG( ez.Unit ):
             if self.SETTINGS.alpha: # If we're adding fake EEG alpha
                 cur_time = ( time + self.STATE.cur_sample ) / self.SETTINGS.fs
                 alpha = np.sin( 2.0 * np.pi * self.SETTINGS.alpha * cur_time )
-                arr = ( arr.T + ( alpha * self.SETTINGS.amplitude ) ).T
+                arr = ( arr.T + ( alpha * self.SETTINGS.amplitude * 0.2 ) ).T
 
             self.STATE.cur_sample += self.SETTINGS.blocksize
 
@@ -120,37 +120,70 @@ class EEGSynth( ez.Collection ):
             ( self.FILTER.OUTPUT_SIGNAL, self.OUTPUT_SIGNAL )
         )
 
-from dataclasses import dataclass
 import matplotlib
 matplotlib.use( "agg" )
 
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
+from matplotlib.lines import Line2D
 
 import panel
 import param
 
 class EEGPlot( param.Parameterized ):
-    gain = param.Number( default = 1.0, bounds = ( 0, 1e6 ) )
-    eeg = param.Array( default = None )
+    # Reactive Parameters
+    gain = param.Number( default = 1e6 )
+    offset = param.Number( default = 2.0 )
+    msg: Optional[ EEGMessage ] = param.Parameter()
 
+    # Internal plotting functionality
     fig: Figure
     ax: Axes
+    lines: Optional[ List[ Line2D ] ] = None
 
-    def __init__( self, **params ):
+    def __init__( self, **params ) -> None:
         super().__init__( **params )
-        self.fig, self.ax = plt.subplots( dpi = 100 )
+        self.fig, self.ax = plt.subplots( figsize = ( 8.0, 4.0 ) )
 
-    @param.depends( 'eeg', watch = True )
     def view( self ) -> Figure:
+        if self.msg is not None:
+            y_offsets = np.arange( self.msg.n_ch ) * self.offset
+            arr = ( self.msg.data * self.gain ) + y_offsets
+            eeg_dur = self.msg.n_time / self.msg.fs
 
-        if self.eeg is not None:
-            self.ax.clear()
-            arr = self.eeg * self.gain
-            self.ax.plot( arr [ :, 0 ] )
+            if self.lines is None:
+                time = ( np.arange( self.msg.n_time ) / self.msg.fs ) - eeg_dur
+                self.lines = self.ax.plot( time, arr )
+            else:
+                self.ax.set_autoscale_on( False )
+                for idx, line in enumerate( self.lines ):
+                    line.set_ydata( arr[ :, idx ] )
+
+            self.ax.set_ylim( -self.offset, self.msg.n_ch * self.offset )
+            self.ax.set_yticks( y_offsets )
+            if self.msg.ch_names is not None:
+                self.ax.set_yticklabels( self.msg.ch_names )
+            self.ax.set_xlim( -eeg_dur, 0.0 )
+            self.ax.grid( 'True' )
+
+            self.ax.spines[ 'right' ].set_visible( False )
+            self.ax.spines[ 'top' ].set_visible( False )
+
+            self.fig.canvas.draw()
+
 
         return self.fig
+
+    def panel( self ) -> panel.viewable.Viewable:
+        return panel.Row(
+            self.view,
+            panel.Column(
+                "<br>\n# EEG Plot",
+                panel.widgets.NumberInput.from_param( self.param[ 'gain' ] ),
+                panel.widgets.NumberInput.from_param( self.param[ 'offset' ] )
+            )
+        )
 
 class EEGPlotterSettings( ez.Settings ):
     ...
@@ -167,39 +200,12 @@ class EEGPlotter( ez.Unit ):
 
     @ez.subscriber( INPUT_SIGNAL )
     async def on_signal( self, msg: EEGMessage ) -> None:
-        logger.info( 'Updating data' )
-        self.STATE.plot.eeg = msg.data
+        self.STATE.plot.msg = msg
 
     @ez.main
     def serve_dashboard( self ) -> None:
-
-        fig, ax = plt.subplots( dpi = 100 )
-
-        # def plot_eeg( gain: float, eeg: Optional[ np.ndarray ] ) -> Figure:
-
-        #     print( f'Replotting {eeg=}' )
-
-        #     if eeg is not None:
-        #         ax.clear()
-        #         arr = eeg * gain
-        #         ax.plot( arr [ :, 0 ] )
-
-        #     return fig
-
-        # gain = panel.widgets.FloatSlider( name = 'Gain', value = 1.0, start = 0.0, end = 1e6, step = 1e4 )
-        # reactive_plot = panel.bind( plot_eeg, gain, self.STATE.eeg_data, watch = True )
-        # widgets = panel.Column( "<br>\n# Plot", gain )
-        # app = panel.Row( reactive_plot, widgets )
-        # thread = panel.serve( app, port = 8082 )
-
-        app = panel.Row( 
-            self.STATE.plot.param,
-            self.STATE.plot.view
-        )
-
-        panel.serve( app, port = 8082 )
+        panel.serve( self.STATE.plot.panel, port = 8082, show = False )
         
-
 
 class ShallowFBCSPTrainingTestSystemSettings( ez.Settings ):
     shallowfbcsptraining_settings: ShallowFBCSPTrainingSettings
@@ -228,8 +234,8 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
 
         self.WINDOW.apply_settings(
             WindowSettings( 
-                window_dur = 2.0, 
-                window_shift = 0.5 
+                window_dur = 4.0, 
+                window_shift = 0.2 
             )
         )
 
