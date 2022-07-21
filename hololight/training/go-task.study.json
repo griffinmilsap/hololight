@@ -262,7 +262,7 @@
         }
       ],
       "title": "Fixation",
-      "_tab": "Behavior",
+      "_tab": "Scripts",
       "timeout": "5000"
     },
     "8": {
@@ -403,7 +403,7 @@
         {
           "title": "Send Triggers",
           "message": "run",
-          "code": "window.send_trigger( 0, -3.0, 0.0 );\nwindow.send_trigger( this.parameters.condition, 0.0, 3.0 );"
+          "code": "window.send_trigger( '0', -3.0, 0.0 );\nwindow.send_trigger( this.parameters.condition, 0.0, 3.0 );"
         }
       ],
       "title": "Go",

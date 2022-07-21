@@ -26,11 +26,11 @@ class TrainingServerSettings( ez.Settings ):
     host: str = '0.0.0.0'
     port: int = 8080
     ws_port: int = 5545
-    trigger_sender: Optional[ str ] = None # If specified we only trigger when sender == this string
-    assign_trigger_value: bool = False # If true, we assign the commit to the value of the trigger
 
 class TrainingServerState( ez.State ):
-    trigger_queue: "asyncio.Queue[ SampleTriggerMessage ]" = field( default_factory = asyncio.Queue )
+    trigger_queue: "asyncio.Queue[ SampleTriggerMessage ]" = field( 
+        default_factory = asyncio.Queue 
+    )
 
 class TrainingServer( ez.Unit ):
 
@@ -54,16 +54,36 @@ class TrainingServer( ez.Unit ):
             try:
                 while True:
                     data = json.loads( await websocket.recv() )
+                    if isinstance( data, dict ):
 
-                    if self.SETTINGS.trigger_sender is None or ( 
-                        self.SETTINGS.trigger_sender is not None and \
-                        data[ 'sender' ] == self.SETTINGS.trigger_sender 
-                    ):             
-                        self.STATE.trigger_queue.put_nowait(
-                            SampleTriggerMessage(
-                                value = data if self.SETTINGS.assign_trigger_value else None
+                        msg_type = data.get( 'type', None )
+
+                        if msg_type == 'LOG':
+                            ...
+
+                        elif msg_type == 'LOGJSON':
+                            ...
+
+                        elif msg_type == 'TRIGGER':
+
+                            period = None
+                            start = data.get( 'start', None )
+                            stop = data.get( 'stop', None )
+                            if start is not None and stop is not None:
+                                period = ( start, stop )
+                                
+                            self.STATE.trigger_queue.put_nowait(
+                                SampleTriggerMessage(
+                                    value = data.get( 'value', None ),
+                                    period = period
+                                )
                             )
-                        )
+
+                        else:
+                            logger.warn( f'Unknown message type from websocket client: {msg_type=}' )
+
+                    else:
+                        logger.warn( 'Unknown message from websocket client' )
 
             except websockets.exceptions.ConnectionClosedOK:
                 logger.info( 'Websocket Client Closed Connection' )
@@ -119,7 +139,7 @@ class TrainingServer( ez.Unit ):
         )
 
         httpd.serve_forever()
-
+        
 
 ### DEV/TEST APPARATUS
 
@@ -178,8 +198,7 @@ if __name__ == '__main__':
     settings = TrainingServerSettings(
         cert = cert,
         key = key,
-        ca_cert = cacert,
-        trigger_sender = 'Fixation'
+        ca_cert = cacert
     )
 
     system = TrainingServerTestSystem( settings )

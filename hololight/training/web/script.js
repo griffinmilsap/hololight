@@ -213,7 +213,7 @@ window.send_trigger = function( value, start, stop ) {
               "messageHandlers": {
                 "run": function anonymous(
 ) {
-window.send_trigger( 0, -3.0, 0.0 );
+window.send_trigger( '0', -3.0, 0.0 );
 window.send_trigger( this.parameters.condition, 0.0, 3.0 );
 }
               },
