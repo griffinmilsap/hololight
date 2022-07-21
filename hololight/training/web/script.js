@@ -41,7 +41,7 @@ const study = lab.util.fromObject({
       },
       "parameters": {},
       "messageHandlers": {
-        "after:end": function anonymous(
+        "run": function anonymous(
 ) {
 window.socket = new WebSocket( "wss://" + location.hostname + ':5545' );   
 window.socket.onopen = () => console.log( 'Input Socket Connected' );
@@ -53,14 +53,33 @@ window.socket.onmessage = ( msg ) => {
   this.commit();
 };
 
+window.transmit = function( obj ){
+  if( window.socket )
+    if( window.socket.readyState === window.socket.OPEN ) {
+      window.socket.send( JSON.stringify( obj ) );
+    }
+};
+
 this.internals.controller.datastore.on( 
-  'commit', () => {
-    if( window.socket )
-      if( window.socket.readyState === window.socket.OPEN ) {
-        window.socket.send( JSON.stringify( this.state ) ) 
-      }
+  'commit', () => { 
+    window.transmit( 
+      { type: 'LOGJSON', value: this.state } 
+    ); 
   } 
-)
+);
+
+window.send_trigger = function( value, start, stop ) {
+  console.log( 'Trigger:', value, start, stop );
+  if( window.socket )
+    if( window.socket.readyState === window.socket.OPEN ) {
+      window.transmit( { 
+        type: 'TRIGGER', 
+        value: value, 
+        start: start, 
+        stop: stop 
+      } );
+    }
+};
 }
       },
       "title": "Instructions"
@@ -191,7 +210,13 @@ this.internals.controller.datastore.on(
                 "": ""
               },
               "parameters": {},
-              "messageHandlers": {},
+              "messageHandlers": {
+                "run": function anonymous(
+) {
+window.send_trigger( 0, -3.0, 0.0 );
+window.send_trigger( this.parameters.condition, 0.0, 3.0 );
+}
+              },
               "title": "Go",
               "timeout": "3000"
             }

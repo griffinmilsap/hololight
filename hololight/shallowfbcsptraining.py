@@ -37,13 +37,15 @@ from ezmsg.sigproc.window import Window, WindowSettings
 
 from .plotter import EEGPlotter
 from .eegsynth import EEGSynth, EEGSynthSettings
-
-   
+from .preprocessing import Preprocessing, PreprocessingSettings
 
 class ShallowFBCSPTrainingTestSystemSettings( ez.Settings ):
     shallowfbcsptraining_settings: ShallowFBCSPTrainingSettings
     eeg_settings: EEGSynthSettings = field( 
         default_factory = EEGSynthSettings 
+    )
+    preproc_settings: PreprocessingSettings = field(
+        default_factory = PreprocessingSettings
     )
 
 class ShallowFBCSPTrainingTestSystem( ez.System ):
@@ -51,8 +53,12 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
     SETTINGS: ShallowFBCSPTrainingTestSystemSettings
 
     EEG = EEGSynth()
+
+    PREPROC = Preprocessing()
+
     WINDOW = Window()
-    # PLOTTER = EEGPlotter()
+    PLOTTER = EEGPlotter()
+
     FBCSP_TRAINING = ShallowFBCSPTraining()
     DEBUG = DebugLog()
 
@@ -65,22 +71,27 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
             self.SETTINGS.eeg_settings
         )
 
+        self.PREPROC.apply_settings(
+            self.SETTINGS.preproc_settings
+        )
+
         self.WINDOW.apply_settings(
             WindowSettings( 
                 window_dur = 4.0, 
-                window_shift = 0.2 
+                window_shift = 1.0 
             )
         )
 
     def network( self ) -> ez.NetworkDefinition:
         return ( 
-            ( self.EEG.OUTPUT_SIGNAL, self.WINDOW.INPUT_SIGNAL ),
+            ( self.EEG.OUTPUT_SIGNAL, self.PREPROC.INPUT_SIGNAL ),
+            ( self.PREPROC.OUTPUT_SIGNAL, self.WINDOW.INPUT_SIGNAL ),
             # ( self.WINDOW.OUTPUT_SIGNAL, self.DEBUG.INPUT ),
-            # ( self.WINDOW.OUTPUT_SIGNAL, self.PLOTTER.INPUT_SIGNAL ),
+            ( self.WINDOW.OUTPUT_SIGNAL, self.PLOTTER.INPUT_SIGNAL ),
         )
 
     def process_components( self ) -> Tuple[ ez.Component, ... ]:
-        return ( self.FBCSP_TRAINING, )
+        return ( self.FBCSP_TRAINING, self.PLOTTER )
 
 if __name__ == '__main__':
 
@@ -88,9 +99,9 @@ if __name__ == '__main__':
 
     settings = ShallowFBCSPTrainingTestSystemSettings(
         eeg_settings = EEGSynthSettings(
-            fs = 100.0, # Hz
+            fs = 500.0, # Hz
             channels = num_channels,
-            blocksize = 10, # samples per block
+            blocksize = 200, # samples per block
             amplitude = 10e-6, # Volts
             dc_offset = 0, # Volts
             alpha = 9.5, # Hz; don't add alpha if None

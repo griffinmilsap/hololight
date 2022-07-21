@@ -32,8 +32,8 @@
       "messageHandlers": [
         {
           "title": "Connect",
-          "message": "after:end",
-          "code": "window.socket = new WebSocket( \"wss://\" + location.hostname + ':5545' );   \nwindow.socket.onopen = () => console.log( 'Input Socket Connected' );\n  \nwindow.socket.onmessage = ( msg ) => {\n  var content = JSON.parse( msg.data );\n  for( var key in content )\n    this.state[key] = content[key];\n  this.commit();\n};\n\nthis.internals.controller.datastore.on( \n  'commit', () => {\n    if( window.socket )\n      if( window.socket.readyState === window.socket.OPEN ) {\n        window.socket.send( JSON.stringify( this.state ) ) \n      }\n  } \n)"
+          "message": "run",
+          "code": "window.socket = new WebSocket( \"wss://\" + location.hostname + ':5545' );   \nwindow.socket.onopen = () => console.log( 'Input Socket Connected' );\n  \nwindow.socket.onmessage = ( msg ) => {\n  var content = JSON.parse( msg.data );\n  for( var key in content )\n    this.state[key] = content[key];\n  this.commit();\n};\n\nwindow.transmit = function( obj ){\n  if( window.socket )\n    if( window.socket.readyState === window.socket.OPEN ) {\n      window.socket.send( JSON.stringify( obj ) );\n    }\n};\n\nthis.internals.controller.datastore.on( \n  'commit', () => { \n    window.transmit( \n      { type: 'LOGJSON', value: this.state } \n    ); \n  } \n);\n\nwindow.send_trigger = function( value, start, stop ) {\n  console.log( 'Trigger:', value, start, stop );\n  if( window.socket )\n    if( window.socket.readyState === window.socket.OPEN ) {\n      window.transmit( { \n        type: 'TRIGGER', \n        value: value, \n        start: start, \n        stop: stop \n      } );\n    }\n};"
         }
       ],
       "title": "Instructions",
@@ -401,13 +401,13 @@
       ],
       "messageHandlers": [
         {
-          "title": "",
-          "message": "",
-          "code": ""
+          "title": "Send Triggers",
+          "message": "run",
+          "code": "window.send_trigger( 0, -3.0, 0.0 );\nwindow.send_trigger( this.parameters.condition, 0.0, 3.0 );"
         }
       ],
       "title": "Go",
-      "_tab": "Behavior",
+      "_tab": "Scripts",
       "timeout": "3000"
     },
     "root": {
