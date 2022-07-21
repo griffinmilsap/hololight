@@ -1,5 +1,4 @@
-import asyncio
-from dataclasses import field
+from dataclasses import field, replace
 import logging
 
 import ezmsg.core as ez
@@ -36,12 +35,53 @@ from pathlib import Path
 
 from ezmsg.testing.debuglog import DebugLog
 from ezmsg.sigproc.window import Window, WindowSettings
+from ezmsg.eeg.eegmessage import EEGMessage
 
 from .plotter import EEGPlotter
 from .eegsynth import EEGSynth, EEGSynthSettings
 from .preprocessing import Preprocessing, PreprocessingSettings
 from .training.server import TrainingServer, TrainingServerSettings
 from .sampler import Sampler, SamplerSettings
+
+class SampleSignalModulatorSettings( ez.Settings ):
+    signal_amplitude: float = 0.01
+
+class SampleSignalModulatorState( ez.State ):
+    classes: List[ str ] = field( default_factory = list )
+
+class SampleSignalModulator( ez.Unit ):
+
+    STATE: SampleSignalModulatorState
+    SETTINGS: SampleSignalModulatorSettings
+
+    INPUT_SAMPLE = ez.InputStream( SampleMessage )
+    OUTPUT_SAMPLE = ez.OutputStream( SampleMessage )
+
+    OUTPUT_EEG = ez.OutputStream( EEGMessage )
+
+    @ez.subscriber( INPUT_SAMPLE )
+    @ez.publisher( OUTPUT_SAMPLE )
+    @ez.publisher( OUTPUT_EEG )
+    async def on_sample( self, msg: SampleMessage ) -> AsyncGenerator:
+
+        if msg.trigger.value not in self.STATE.classes:
+            self.STATE.classes.append( msg.trigger.value )
+
+        assert isinstance( msg.sample, EEGMessage )
+        sample: EEGMessage = msg.sample
+
+        ch_idx = min( self.STATE.classes.index( msg.trigger.value ), sample.n_ch )
+        arr = np.swapaxes( sample.data, sample.time_dim, 0 )
+
+        sample_time = ( np.arange( sample.n_time ) / sample.fs )
+        test_signal = np.sin( 2.0 * np.pi * 20.0 * sample_time )
+        test_signal = test_signal * np.hamming( sample.n_time )
+        arr[:, ch_idx] = arr[:, ch_idx] + ( test_signal * self.SETTINGS.signal_amplitude )
+
+        sample = replace( sample, data = np.swapaxes( arr, sample.time_dim, 0 ) )
+        yield self.OUTPUT_EEG, sample
+        yield self.OUTPUT_SAMPLE, replace( msg, sample = sample )
+
 
 class ShallowFBCSPTrainingTestSystemSettings( ez.Settings ):
     shallowfbcsptraining_settings: ShallowFBCSPTrainingSettings
@@ -60,6 +100,7 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
     EEG = EEGSynth()
     PREPROC = Preprocessing()
     SAMPLER = Sampler()
+    INJECTOR = SampleSignalModulator()
 
     WINDOW = Window()
     PLOTTER = EEGPlotter()
@@ -102,15 +143,15 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
         return ( 
             ( self.EEG.OUTPUT_SIGNAL, self.PREPROC.INPUT_SIGNAL ),
             ( self.PREPROC.OUTPUT_SIGNAL, self.SAMPLER.INPUT_SIGNAL ),
-            ( self.SAMPLER.OUTPUT_SAMPLE, self.FBCSP_TRAINING.INPUT_SAMPLE ),
+            ( self.SAMPLER.OUTPUT_SAMPLE, self.INJECTOR.INPUT_SAMPLE ),
+            ( self.INJECTOR.OUTPUT_SAMPLE, self.FBCSP_TRAINING.INPUT_SAMPLE ),
 
-            ( self.SAMPLER.OUTPUT_SAMPLE, self.DEBUG.INPUT ),
+            ( self.INJECTOR.OUTPUT_SAMPLE, self.DEBUG.INPUT ),
 
             ( self.TRAIN_SERVER.OUTPUT_SAMPLETRIGGER, self.SAMPLER.INPUT_TRIGGER ),
 
             # Plotter connections
-            ( self.PREPROC.OUTPUT_SIGNAL, self.WINDOW.INPUT_SIGNAL ),
-            ( self.WINDOW.OUTPUT_SIGNAL, self.PLOTTER.INPUT_SIGNAL ),
+            ( self.INJECTOR.OUTPUT_EEG, self.PLOTTER.INPUT_SIGNAL ),
         )
 
     def process_components( self ) -> Tuple[ ez.Component, ... ]:
@@ -201,7 +242,10 @@ if __name__ == '__main__':
 # Change TimeseriesMessage to TSMessage
 # Change EEGMessage to MultiChTSMessage
 # Alias EEGMessage
+
 # Adapt ShallowFBCSPNet to accept a n_crops parameter INSTEAD of a final_conv_length parameter
 # Split ShallowFBCSPNet dataclass into two sets of parameters:
     # one for model specifications
     # one for IO parameters (num channels, num crops, input time len, etc)
+    
+# Template typing parameter for SampleMessage
