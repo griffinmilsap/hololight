@@ -133,9 +133,3 @@ if __name__ == '__main__':
 # Split ShallowFBCSPNet dataclass into two sets of parameters:
     # one for model specifications
     # one for IO parameters (num channels, num crops, input time len, etc)
-# Adapt websocket API to send 
-    # LOG
-    # LOGJSON
-    # TRIGGER
-        # (Incl Per and value)
-# Send two triggers from individual labjs slides
