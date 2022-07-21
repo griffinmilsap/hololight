@@ -32,15 +32,20 @@ class ShallowFBCSPTraining( ez.Unit ):
 
 # Dev/Test Fixture
 
+from pathlib import Path
+
 from ezmsg.testing.debuglog import DebugLog
 from ezmsg.sigproc.window import Window, WindowSettings
 
 from .plotter import EEGPlotter
 from .eegsynth import EEGSynth, EEGSynthSettings
 from .preprocessing import Preprocessing, PreprocessingSettings
+from .training.server import TrainingServer, TrainingServerSettings
+from .sampler import Sampler, SamplerSettings
 
 class ShallowFBCSPTrainingTestSystemSettings( ez.Settings ):
     shallowfbcsptraining_settings: ShallowFBCSPTrainingSettings
+    trainingserver_settings: TrainingServerSettings
     eeg_settings: EEGSynthSettings = field( 
         default_factory = EEGSynthSettings 
     )
@@ -53,12 +58,13 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
     SETTINGS: ShallowFBCSPTrainingTestSystemSettings
 
     EEG = EEGSynth()
-
     PREPROC = Preprocessing()
+    SAMPLER = Sampler()
 
     WINDOW = Window()
     PLOTTER = EEGPlotter()
 
+    TRAIN_SERVER = TrainingServer()
     FBCSP_TRAINING = ShallowFBCSPTraining()
     DEBUG = DebugLog()
 
@@ -75,32 +81,92 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
             self.SETTINGS.preproc_settings
         )
 
+        self.TRAIN_SERVER.apply_settings(
+            self.SETTINGS.trainingserver_settings
+        )
+
         self.WINDOW.apply_settings(
             WindowSettings( 
-                window_dur = 4.0, 
-                window_shift = 1.0 
+                window_dur = 4.0, # sec
+                window_shift = 1.0 # sec
+            )
+        )
+
+        self.SAMPLER.apply_settings(
+            SamplerSettings(
+                buffer_dur = 5.0 # sec
             )
         )
 
     def network( self ) -> ez.NetworkDefinition:
         return ( 
             ( self.EEG.OUTPUT_SIGNAL, self.PREPROC.INPUT_SIGNAL ),
+            ( self.PREPROC.OUTPUT_SIGNAL, self.SAMPLER.INPUT_SIGNAL ),
+            ( self.SAMPLER.OUTPUT_SAMPLE, self.FBCSP_TRAINING.INPUT_SAMPLE ),
+
+            ( self.SAMPLER.OUTPUT_SAMPLE, self.DEBUG.INPUT ),
+
+            ( self.TRAIN_SERVER.OUTPUT_SAMPLETRIGGER, self.SAMPLER.INPUT_TRIGGER ),
+
+            # Plotter connections
             ( self.PREPROC.OUTPUT_SIGNAL, self.WINDOW.INPUT_SIGNAL ),
-            # ( self.WINDOW.OUTPUT_SIGNAL, self.DEBUG.INPUT ),
             ( self.WINDOW.OUTPUT_SIGNAL, self.PLOTTER.INPUT_SIGNAL ),
         )
 
     def process_components( self ) -> Tuple[ ez.Component, ... ]:
-        return ( self.FBCSP_TRAINING, self.PLOTTER )
+        return ( 
+            self.FBCSP_TRAINING, 
+            self.PLOTTER, 
+            self.TRAIN_SERVER 
+        )
 
 if __name__ == '__main__':
 
-    num_channels = 8
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description = 'ShallowFBCSP Dev/Test Environment'
+    )
+
+    parser.add_argument(
+        '--channels',
+        type = int,
+        help = "Number of EEG channels to simulate",
+        default = 8
+    )
+
+    parser.add_argument(
+        '--cert',
+        type = lambda x: Path( x ),
+        help = "Certificate file for frontend server",
+        default = ( Path( '.' ) / 'cert.pem' ).absolute()
+    )
+
+    parser.add_argument(
+        '--key',
+        type = lambda x: Path( x ),
+        help = "Private key for frontend server [Optional -- assumed to be included in --cert file if omitted)",
+        default = None
+    )
+
+    parser.add_argument(
+        '--cacert',
+        type = lambda x: Path( x ),
+        help = "Certificate for custom authority [Optional]",
+        default = None
+    )
+
+    args = parser.parse_args()
+
+    channels: int = args.channels
+    cert: Path = args.cert
+    key: Optional[ Path ] = args.key
+    cacert: Optional[ Path ] = args.cacert
 
     settings = ShallowFBCSPTrainingTestSystemSettings(
         eeg_settings = EEGSynthSettings(
             fs = 500.0, # Hz
-            channels = num_channels,
+            channels = channels,
             blocksize = 200, # samples per block
             amplitude = 10e-6, # Volts
             dc_offset = 0, # Volts
@@ -113,9 +179,15 @@ if __name__ == '__main__':
             dispatch_rate = 'realtime'
         ),
 
+        trainingserver_settings = TrainingServerSettings(
+            cert = cert,
+            key = key,
+            ca_cert = cacert
+        ),
+
         shallowfbcsptraining_settings = ShallowFBCSPTrainingSettings(
             model_spec = ShallowFBCSPNet(
-                in_chans = num_channels,
+                in_chans = channels,
                 n_classes = 2,
             )
         )

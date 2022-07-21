@@ -20,7 +20,7 @@ from typing import Optional, List
 
 class EEGPlot( param.Parameterized ):
     # Reactive Parameters
-    gain = param.Number( default = 1e6 )
+    gain = param.Number( default = 1.0 )
     offset = param.Number( default = 2.0 )
     msg: Optional[ EEGMessage ] = param.Parameter()
 
