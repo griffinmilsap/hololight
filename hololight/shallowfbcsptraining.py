@@ -33,6 +33,8 @@ class ShallowFBCSPTraining( ez.Unit ):
 
 from pathlib import Path
 
+from ezmsg.util.messagelogger import MessageLogger, MessageLoggerSettings
+
 from ezmsg.testing.debuglog import DebugLog
 from ezmsg.sigproc.window import Window, WindowSettings
 from ezmsg.eeg.eegmessage import EEGMessage
@@ -101,6 +103,7 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
     PREPROC = Preprocessing()
     SAMPLER = Sampler()
     INJECTOR = SampleSignalModulator()
+    LOGGER = MessageLogger()
 
     WINDOW = Window()
     PLOTTER = EEGPlotter()
@@ -139,6 +142,12 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
             )
         )
 
+        self.LOGGER.apply_settings(
+            MessageLoggerSettings(
+                output = Path( '.' ) / 'recordings' / 'traindata.txt'
+            )
+        )
+
     def network( self ) -> ez.NetworkDefinition:
         return ( 
             ( self.EEG.OUTPUT_SIGNAL, self.PREPROC.INPUT_SIGNAL ),
@@ -152,13 +161,16 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
 
             # Plotter connections
             ( self.INJECTOR.OUTPUT_EEG, self.PLOTTER.INPUT_SIGNAL ),
+
+            ( self.INJECTOR.OUTPUT_EEG, self.LOGGER.INPUT_MESSAGE ),
         )
 
     def process_components( self ) -> Tuple[ ez.Component, ... ]:
         return ( 
             self.FBCSP_TRAINING, 
             self.PLOTTER, 
-            self.TRAIN_SERVER 
+            self.TRAIN_SERVER,
+            self.LOGGER
         )
 
 if __name__ == '__main__':
@@ -208,7 +220,7 @@ if __name__ == '__main__':
         eeg_settings = EEGSynthSettings(
             fs = 500.0, # Hz
             channels = channels,
-            blocksize = 200, # samples per block
+            blocksize = 100, # samples per block
             amplitude = 10e-6, # Volts
             dc_offset = 0, # Volts
             alpha = 9.5, # Hz; don't add alpha if None
@@ -218,6 +230,23 @@ if __name__ == '__main__':
             # float number => block publish rate in Hz
             # 'realtime' => Use wall-clock to publish EEG at proper rate
             dispatch_rate = 'realtime'
+        ),
+
+        preproc_settings = PreprocessingSettings(
+            # 1. Bandpass Filter
+            bpfilt_order = 5,
+            bpfilt_cuton = 5.0, # Hz
+            bpfilt_cutoff = 30.0, # Hz
+
+            # 2. Downsample
+            downsample_factor = 2, # Downsample factor to reduce sampling rate to ~ 250 Hz
+
+            # 3. Exponentially Weighted Standardization
+            ewm_history_dur = 4.0, # sec
+
+            # 4. Sliding Window
+            output_window_dur = 1.0, # sec
+            output_window_shift = 1.0, # sec
         ),
 
         trainingserver_settings = TrainingServerSettings(
@@ -230,6 +259,7 @@ if __name__ == '__main__':
             model_spec = ShallowFBCSPNet(
                 in_chans = channels,
                 n_classes = 2,
+                input_time_length = 1000
             )
         )
     )
@@ -243,9 +273,4 @@ if __name__ == '__main__':
 # Change EEGMessage to MultiChTSMessage
 # Alias EEGMessage
 
-# Adapt ShallowFBCSPNet to accept a n_crops parameter INSTEAD of a final_conv_length parameter
-# Split ShallowFBCSPNet dataclass into two sets of parameters:
-    # one for model specifications
-    # one for IO parameters (num channels, num crops, input time len, etc)
-    
 # Template typing parameter for SampleMessage
