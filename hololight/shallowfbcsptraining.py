@@ -162,7 +162,7 @@ class ShallowFBCSPTrainingTestSystem( ez.System ):
             # Plotter connections
             ( self.INJECTOR.OUTPUT_EEG, self.PLOTTER.INPUT_SIGNAL ),
 
-            ( self.INJECTOR.OUTPUT_EEG, self.LOGGER.INPUT_MESSAGE ),
+            ( self.INJECTOR.OUTPUT_SAMPLE, self.LOGGER.INPUT_MESSAGE ),
         )
 
     def process_components( self ) -> Tuple[ ez.Component, ... ]:
